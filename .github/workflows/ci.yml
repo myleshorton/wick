@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Download libcronet
+        run: bash scripts/download-libcronet.sh .
+
+      - name: Build
+        run: go build -tags with_purego -o wick ./cmd/wick
+
+      - name: Test
+        run: go test -tags with_purego -v ./...
+
+      - name: Verify binary
+        run: |
+          ./wick version
+          ./wick --help
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Vet
+        run: go vet -tags with_purego ./...
