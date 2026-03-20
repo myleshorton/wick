@@ -860,7 +860,7 @@ footer {
 <nav id="nav">
   <a href="#" class="nav-logo">
     WICK
-    <span>by Lantern</span>
+    <span>open source</span>
   </a>
   <ul class="nav-links">
     <li><a href="#problem">Why</a></li>
@@ -884,7 +884,7 @@ footer {
   </div>
   <div class="hero-install">
     <div class="install-code" onclick="copyInstall(this)">
-      <code><span>$</span> brew install getlantern/tap/wick && wick setup</code>
+      <code><span>$</span> brew install wick && wick setup</code>
       <button class="copy-btn" aria-label="Copy to clipboard">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
       </button>
@@ -995,7 +995,7 @@ footer {
     <div class="feature-card reveal reveal-delay-5">
       <span class="feature-icon">&#x2764;</span>
       <h3>Free &amp; Open Source</h3>
-      <p>Wick is MIT-licensed and costs nothing to run. From the team behind Lantern &mdash; trusted by millions for internet freedom since 2013.</p>
+      <p>Wick is MIT-licensed and costs nothing to run. Built by a team with over a decade of experience in internet access technology.</p>
     </div>
   </div>
 </section>
@@ -1012,7 +1012,7 @@ footer {
       <div>
         <h3>Install</h3>
         <p>One line. Homebrew on macOS, or grab the binary from GitHub releases.</p>
-        <code>brew install getlantern/tap/wick</code>
+        <code>brew install wick</code>
       </div>
     </div>
     <div class="step reveal reveal-delay-1">
@@ -1072,12 +1072,12 @@ footer {
 <footer>
   <div class="footer-inner">
     <div class="footer-brand">
-      Wick &mdash; by <a href="https://getlantern.org">Lantern</a> &middot; The part of the lantern that actually burns.
+      Wick &mdash; Open source, free forever.
     </div>
     <ul class="footer-links">
       <li><a href="https://github.com/myleshorton/wick">GitHub</a></li>
       <li><a href="https://github.com/myleshorton/wick/issues">Issues</a></li>
-      <li><a href="https://getlantern.org">Lantern</a></li>
+      <li><a href="https://github.com/myleshorton/wick/blob/main/LICENSE">License</a></li>
     </ul>
   </div>
 </footer>
@@ -1102,7 +1102,7 @@ window.addEventListener('scroll', () => {
 
 // Copy install command
 function copyInstall(el) {
-  const text = 'brew install getlantern/tap/wick && wick setup';
+  const text = 'brew install wick && wick setup';
   navigator.clipboard.writeText(text).then(() => {
     const copied = el.querySelector('.copied');
     copied.classList.add('show');
