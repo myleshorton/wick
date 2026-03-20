@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wick — Browser-Grade Web Access for AI Agents</title>
+<meta name="description" content="Your AI agent gets blocked on the web. Wick fixes that. Browser-grade access, running locally, from your own IP.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --flame: #E8913A;
+  --flame-bright: #F5B74C;
+  --flame-hot: #FF6B2B;
+  --ember: #C45A1A;
+  --ash: #1A1714;
+  --smoke: #2A2520;
+  --smoke-light: #3D3630;
+  --warm-white: #F0E6D8;
+  --warm-gray: #9E958A;
+  --cool-gray: #6B635A;
+  --black: #0D0B09;
+  --font-display: 'Outfit', sans-serif;
+  --font-serif: 'Instrument Serif', serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html {
+  scroll-behavior: smooth;
+  scrollbar-color: var(--smoke-light) var(--black);
+}
+
+body {
+  background: var(--black);
+  color: var(--warm-white);
+  font-family: var(--font-display);
+  font-weight: 300;
+  line-height: 1.6;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--flame);
+  color: var(--black);
+}
+
+/* ── Grain overlay ── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ── Navigation ── */
+nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  padding: 1.5rem 3rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  backdrop-filter: blur(20px);
+  background: rgba(13, 11, 9, 0.7);
+  border-bottom: 1px solid rgba(232, 145, 58, 0.06);
+  transition: all 0.4s ease;
+}
+
+nav.scrolled {
+  padding: 1rem 3rem;
+  background: rgba(13, 11, 9, 0.92);
+}
+
+.nav-logo {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.3rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--flame);
+  text-decoration: none;
+}
+
+.nav-logo span {
+  color: var(--warm-gray);
+  font-weight: 400;
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  display: block;
+  margin-top: -2px;
+}
+
+.nav-links {
+  display: flex;
+  gap: 2.5rem;
+  align-items: center;
+  list-style: none;
+}
+
+.nav-links a {
+  color: var(--warm-gray);
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  transition: color 0.3s ease;
+}
+
+.nav-links a:hover { color: var(--warm-white); }
+
+.nav-cta {
+  background: var(--flame) !important;
+  color: var(--black) !important;
+  padding: 0.6rem 1.5rem;
+  border-radius: 6px;
+  font-weight: 600 !important;
+  transition: all 0.3s ease !important;
+}
+
+.nav-cta:hover {
+  background: var(--flame-bright) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(232, 145, 58, 0.3);
+}
+
+/* ── Hero ── */
+.hero {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 8rem 2rem 4rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.hero::before {
+  content: '';
+  position: absolute;
+  top: -40%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 800px;
+  height: 800px;
+  background: radial-gradient(ellipse at center,
+    rgba(232, 145, 58, 0.12) 0%,
+    rgba(196, 90, 26, 0.06) 30%,
+    rgba(255, 107, 43, 0.02) 50%,
+    transparent 70%
+  );
+  pointer-events: none;
+  animation: glow-pulse 8s ease-in-out infinite;
+}
+
+@keyframes glow-pulse {
+  0%, 100% { opacity: 0.8; transform: translateX(-50%) scale(1); }
+  50% { opacity: 1; transform: translateX(-50%) scale(1.1); }
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1.2rem;
+  border: 1px solid rgba(232, 145, 58, 0.2);
+  border-radius: 100px;
+  font-size: 0.8rem;
+  color: var(--flame);
+  letter-spacing: 0.08em;
+  margin-bottom: 3rem;
+  opacity: 0;
+  animation: fade-up 0.8s ease forwards 0.2s;
+}
+
+.hero-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  background: var(--flame);
+  border-radius: 50%;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.hero h1 {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: clamp(3rem, 7vw, 6rem);
+  line-height: 1.05;
+  max-width: 900px;
+  letter-spacing: -0.02em;
+  opacity: 0;
+  animation: fade-up 0.8s ease forwards 0.4s;
+}
+
+.hero h1 em {
+  font-style: italic;
+  color: var(--flame);
+}
+
+.hero-sub {
+  font-size: clamp(1.1rem, 2vw, 1.35rem);
+  color: var(--warm-gray);
+  max-width: 580px;
+  margin-top: 2rem;
+  font-weight: 300;
+  line-height: 1.7;
+  opacity: 0;
+  animation: fade-up 0.8s ease forwards 0.6s;
+}
+
+.hero-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 3rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  opacity: 0;
+  animation: fade-up 0.8s ease forwards 0.8s;
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--flame);
+  color: var(--black);
+  padding: 1rem 2rem;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 1rem;
+  text-decoration: none;
+  transition: all 0.3s ease;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-primary:hover {
+  background: var(--flame-bright);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(232, 145, 58, 0.3);
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: transparent;
+  color: var(--warm-white);
+  padding: 1rem 2rem;
+  border-radius: 8px;
+  font-weight: 500;
+  font-size: 1rem;
+  text-decoration: none;
+  border: 1px solid var(--smoke-light);
+  transition: all 0.3s ease;
+}
+
+.btn-secondary:hover {
+  border-color: var(--warm-gray);
+  background: rgba(255,255,255,0.03);
+}
+
+.hero-install {
+  margin-top: 2.5rem;
+  opacity: 0;
+  animation: fade-up 0.8s ease forwards 1s;
+}
+
+.install-code {
+  display: inline-flex;
+  align-items: center;
+  gap: 1rem;
+  background: var(--smoke);
+  border: 1px solid var(--smoke-light);
+  border-radius: 10px;
+  padding: 1rem 1.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  color: var(--warm-gray);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.install-code:hover {
+  border-color: var(--flame);
+  background: rgba(232, 145, 58, 0.05);
+}
+
+.install-code code {
+  color: var(--warm-white);
+}
+
+.install-code code span { color: var(--flame); }
+
+.install-code .copy-btn {
+  background: none;
+  border: none;
+  color: var(--cool-gray);
+  cursor: pointer;
+  padding: 0.25rem;
+  transition: color 0.2s;
+  font-size: 1rem;
+}
+
+.install-code .copy-btn:hover { color: var(--flame); }
+
+.install-code .copied {
+  position: absolute;
+  right: -60px;
+  font-size: 0.75rem;
+  color: var(--flame);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.install-code .copied.show { opacity: 1; }
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Scroll line ── */
+.scroll-hint {
+  position: absolute;
+  bottom: 3rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  opacity: 0;
+  animation: fade-up 0.8s ease forwards 1.2s;
+}
+
+.scroll-hint span {
+  font-size: 0.7rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--cool-gray);
+}
+
+.scroll-line {
+  width: 1px;
+  height: 40px;
+  background: linear-gradient(to bottom, var(--flame), transparent);
+  animation: scroll-line-move 2s ease-in-out infinite;
+}
+
+@keyframes scroll-line-move {
+  0% { opacity: 1; transform: scaleY(1); transform-origin: top; }
+  50% { opacity: 0.3; transform: scaleY(0.3); transform-origin: top; }
+  100% { opacity: 1; transform: scaleY(1); transform-origin: top; }
+}
+
+/* ── Problem / Solution ── */
+.problem {
+  padding: 8rem 2rem;
+  position: relative;
+}
+
+.problem::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--smoke-light), transparent);
+}
+
+.section-grid {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6rem;
+  align-items: start;
+}
+
+.section-label {
+  font-size: 0.75rem;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: var(--flame);
+  margin-bottom: 1.5rem;
+  font-weight: 500;
+}
+
+.section-grid h2 {
+  font-family: var(--font-serif);
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 400;
+  line-height: 1.15;
+  margin-bottom: 1.5rem;
+}
+
+.section-grid p {
+  color: var(--warm-gray);
+  font-size: 1.05rem;
+  line-height: 1.8;
+}
+
+/* ── Demo comparison ── */
+.demo {
+  padding: 4rem 2rem 8rem;
+}
+
+.demo-container {
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.demo-header {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.demo-header h2 {
+  font-family: var(--font-serif);
+  font-size: clamp(2rem, 4vw, 2.8rem);
+  font-weight: 400;
+}
+
+.demo-panels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+.demo-panel {
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid var(--smoke-light);
+  background: var(--ash);
+}
+
+.demo-panel-header {
+  padding: 1rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--smoke-light);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.panel-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.panel-dot.red { background: #E84545; }
+.panel-dot.green { background: #4ADE80; }
+
+.demo-panel-body {
+  padding: 1.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  line-height: 1.8;
+  min-height: 220px;
+  color: var(--warm-gray);
+}
+
+.demo-panel.blocked .demo-panel-body {
+  color: #E8454580;
+}
+
+.demo-panel.success .demo-panel-body {
+  color: var(--warm-gray);
+}
+
+.demo-panel-body .cmd { color: var(--cool-gray); }
+.demo-panel-body .err { color: #E84545; }
+.demo-panel-body .ok { color: #4ADE80; }
+.demo-panel-body .content { color: var(--warm-white); }
+.demo-panel-body .dim { color: var(--cool-gray); }
+
+/* ── Features ── */
+.features {
+  padding: 8rem 2rem;
+  position: relative;
+}
+
+.features::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--smoke-light), transparent);
+}
+
+.features-header {
+  text-align: center;
+  max-width: 600px;
+  margin: 0 auto 5rem;
+}
+
+.features-header h2 {
+  font-family: var(--font-serif);
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 400;
+  margin-bottom: 1rem;
+}
+
+.features-header p {
+  color: var(--warm-gray);
+  font-size: 1.1rem;
+}
+
+.features-grid {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+}
+
+.feature-card {
+  background: var(--ash);
+  border: 1px solid var(--smoke-light);
+  border-radius: 16px;
+  padding: 2.5rem 2rem;
+  transition: all 0.4s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.feature-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--flame), var(--flame-bright));
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.feature-card:hover {
+  border-color: rgba(232, 145, 58, 0.2);
+  transform: translateY(-4px);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+
+.feature-card:hover::before { opacity: 1; }
+
+.feature-icon {
+  font-size: 1.8rem;
+  margin-bottom: 1.5rem;
+  display: block;
+}
+
+.feature-card h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.15rem;
+  margin-bottom: 0.75rem;
+}
+
+.feature-card p {
+  color: var(--warm-gray);
+  font-size: 0.95rem;
+  line-height: 1.7;
+}
+
+/* ── How it works ── */
+.how {
+  padding: 8rem 2rem;
+  position: relative;
+}
+
+.how::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--smoke-light), transparent);
+}
+
+.how-header {
+  text-align: center;
+  max-width: 600px;
+  margin: 0 auto 5rem;
+}
+
+.how-header h2 {
+  font-family: var(--font-serif);
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 400;
+  margin-bottom: 1rem;
+}
+
+.steps {
+  max-width: 700px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.step {
+  display: grid;
+  grid-template-columns: 60px 1fr;
+  gap: 1.5rem;
+  padding: 2.5rem 0;
+  border-bottom: 1px solid var(--smoke-light);
+  align-items: start;
+}
+
+.step:last-child { border-bottom: none; }
+
+.step-num {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid var(--flame);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  color: var(--flame);
+  flex-shrink: 0;
+}
+
+.step h3 {
+  font-weight: 600;
+  font-size: 1.15rem;
+  margin-bottom: 0.5rem;
+}
+
+.step p {
+  color: var(--warm-gray);
+  font-size: 0.95rem;
+  line-height: 1.7;
+}
+
+.step code {
+  display: inline-block;
+  background: var(--smoke);
+  border: 1px solid var(--smoke-light);
+  border-radius: 6px;
+  padding: 0.2rem 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--flame);
+  margin-top: 0.5rem;
+}
+
+/* ── Compatibility ── */
+.compat {
+  padding: 6rem 2rem;
+  text-align: center;
+  position: relative;
+}
+
+.compat::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--smoke-light), transparent);
+}
+
+.compat h2 {
+  font-family: var(--font-serif);
+  font-size: 2rem;
+  font-weight: 400;
+  margin-bottom: 3rem;
+}
+
+.compat-logos {
+  display: flex;
+  justify-content: center;
+  gap: 4rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.compat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--warm-gray);
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+
+.compat-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: var(--smoke);
+  border: 1px solid var(--smoke-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  transition: all 0.3s ease;
+}
+
+.compat-item:hover .compat-icon {
+  border-color: var(--flame);
+  background: rgba(232, 145, 58, 0.08);
+}
+
+/* ── CTA ── */
+.cta {
+  padding: 8rem 2rem;
+  text-align: center;
+  position: relative;
+}
+
+.cta::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(ellipse at center,
+    rgba(232, 145, 58, 0.08) 0%,
+    transparent 60%
+  );
+  pointer-events: none;
+}
+
+.cta h2 {
+  font-family: var(--font-serif);
+  font-size: clamp(2.5rem, 5vw, 4rem);
+  font-weight: 400;
+  line-height: 1.1;
+  margin-bottom: 1.5rem;
+}
+
+.cta h2 em {
+  font-style: italic;
+  color: var(--flame);
+}
+
+.cta p {
+  color: var(--warm-gray);
+  font-size: 1.15rem;
+  margin-bottom: 3rem;
+  max-width: 500px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ── Footer ── */
+footer {
+  padding: 3rem 2rem;
+  border-top: 1px solid var(--smoke-light);
+  text-align: center;
+}
+
+.footer-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.footer-brand {
+  font-size: 0.85rem;
+  color: var(--cool-gray);
+}
+
+.footer-brand a {
+  color: var(--flame);
+  text-decoration: none;
+}
+
+.footer-brand a:hover { text-decoration: underline; }
+
+.footer-links {
+  display: flex;
+  gap: 2rem;
+  list-style: none;
+}
+
+.footer-links a {
+  color: var(--cool-gray);
+  text-decoration: none;
+  font-size: 0.85rem;
+  transition: color 0.3s;
+}
+
+.footer-links a:hover { color: var(--warm-white); }
+
+/* ── Scroll animations ── */
+.reveal {
+  opacity: 0;
+  transform: translateY(32px);
+  transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reveal-delay-1 { transition-delay: 0.1s; }
+.reveal-delay-2 { transition-delay: 0.2s; }
+.reveal-delay-3 { transition-delay: 0.3s; }
+.reveal-delay-4 { transition-delay: 0.4s; }
+.reveal-delay-5 { transition-delay: 0.5s; }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  nav { padding: 1rem 1.5rem; }
+  .nav-links { display: none; }
+  .section-grid { grid-template-columns: 1fr; gap: 3rem; }
+  .demo-panels { grid-template-columns: 1fr; }
+  .features-grid { grid-template-columns: 1fr; }
+  .footer-inner { flex-direction: column; gap: 1.5rem; }
+  .compat-logos { gap: 2rem; }
+}
+
+@media (max-width: 480px) {
+  .hero { padding: 6rem 1.5rem 3rem; }
+  .hero-actions { flex-direction: column; align-items: center; }
+  .install-code { font-size: 0.75rem; }
+}
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav id="nav">
+  <a href="#" class="nav-logo">
+    WICK
+    <span>by Lantern</span>
+  </a>
+  <ul class="nav-links">
+    <li><a href="#problem">Why</a></li>
+    <li><a href="#demo">Demo</a></li>
+    <li><a href="#features">Features</a></li>
+    <li><a href="#install">Install</a></li>
+    <li><a href="https://github.com/myleshorton/wick" class="nav-cta">GitHub</a></li>
+  </ul>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-badge">Open Source &middot; Free Forever</div>
+  <h1>Your AI agent is <em>blind</em> on the web</h1>
+  <p class="hero-sub">
+    When your agent tries to read a webpage, it gets blocked. Wick gives it the same access you have &mdash; running locally, from your own&nbsp;IP.
+  </p>
+  <div class="hero-actions">
+    <a href="#install" class="btn-primary">Get Started</a>
+    <a href="https://github.com/myleshorton/wick" class="btn-secondary">View on GitHub &rarr;</a>
+  </div>
+  <div class="hero-install">
+    <div class="install-code" onclick="copyInstall(this)">
+      <code><span>$</span> brew install getlantern/tap/wick && wick setup</code>
+      <button class="copy-btn" aria-label="Copy to clipboard">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+      </button>
+      <span class="copied">Copied!</span>
+    </div>
+  </div>
+  <div class="scroll-hint">
+    <span>Scroll</span>
+    <div class="scroll-line"></div>
+  </div>
+</section>
+
+<!-- Problem / Solution -->
+<section class="problem" id="problem">
+  <div class="section-grid">
+    <div class="reveal">
+      <div class="section-label">The Problem</div>
+      <h2>Anti-bot systems block every request your agent makes</h2>
+      <p>
+        Modern websites fingerprint incoming connections at multiple layers. Your AI agent's HTTP requests look nothing like a real browser &mdash; different network signature, different protocol behavior, missing browser signals. The result: 403 errors, CAPTCHA walls, or degraded content. Your agent is left apologizing instead of helping.
+      </p>
+    </div>
+    <div class="reveal reveal-delay-2">
+      <div class="section-label">The Fix</div>
+      <h2>Wick makes your agent's requests indistinguishable from yours</h2>
+      <p>
+        Wick runs as a lightweight local service on your machine. When your agent needs to fetch a page, Wick handles the request using the same technology real browsers use &mdash; authentic, not mimicked. The request goes out from your own residential IP, with your own cookies. To the website, it looks like you browsing normally. Because it basically&nbsp;is.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- Demo -->
+<section class="demo" id="demo">
+  <div class="demo-container">
+    <div class="demo-header reveal">
+      <div class="section-label">See the difference</div>
+      <h2>Same page. Different results.</h2>
+    </div>
+    <div class="demo-panels">
+      <div class="demo-panel blocked reveal reveal-delay-1">
+        <div class="demo-panel-header">
+          <span class="panel-dot red"></span>
+          Without Wick
+        </div>
+        <div class="demo-panel-body">
+          <span class="cmd">&gt; agent fetches nytimes.com</span><br><br>
+          <span class="err">403 Forbidden</span><br><br>
+          <span class="dim">I'm sorry, I wasn't able to access<br>
+          that page. The site appears to be<br>
+          blocking automated requests.<br><br>
+          You could try copying the content<br>
+          and pasting it here...</span>
+        </div>
+      </div>
+      <div class="demo-panel success reveal reveal-delay-2">
+        <div class="demo-panel-header">
+          <span class="panel-dot green"></span>
+          With Wick
+        </div>
+        <div class="demo-panel-body">
+          <span class="cmd">&gt; agent fetches nytimes.com</span><br><br>
+          <span class="ok">200 OK</span> <span class="dim">&middot; 897ms</span><br><br>
+          <span class="content"># The New York Times<br><br>
+          BREAKING: The Justice Department<br>
+          is examining whether President...<br><br>
+          The pace of ICE arrests nationwide<br>
+          has topped 1,100 per day on average...</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Features -->
+<section class="features" id="features">
+  <div class="features-header reveal">
+    <div class="section-label">Why Wick</div>
+    <h2>Built for agents. Trusted by&nbsp;humans.</h2>
+    <p>Everything your agent needs to access the real web, nothing it doesn't.</p>
+  </div>
+  <div class="features-grid">
+    <div class="feature-card reveal reveal-delay-1">
+      <span class="feature-icon">&#x1f310;</span>
+      <h3>Browser-Grade Access</h3>
+      <p>Wick uses the same networking technology as real browsers. Not an imitation &mdash; the real thing. Websites can't tell the difference because there isn't one.</p>
+    </div>
+    <div class="feature-card reveal reveal-delay-2">
+      <span class="feature-icon">&#x1f3e0;</span>
+      <h3>Runs Locally</h3>
+      <p>Everything happens on your machine. No cloud proxy, no third-party servers. Your data never leaves your network unless you're the one sending it.</p>
+    </div>
+    <div class="feature-card reveal reveal-delay-3">
+      <span class="feature-icon">&#x1f4c4;</span>
+      <h3>Clean Markdown Output</h3>
+      <p>Raw HTML is useless to an LLM. Wick strips boilerplate, navigation, and ads, returning clean, structured markdown your agent can actually use.</p>
+    </div>
+    <div class="feature-card reveal reveal-delay-4">
+      <span class="feature-icon">&#x1f512;</span>
+      <h3>Your IP, Your Request</h3>
+      <p>No pooled residential IPs. No sketchy proxy networks. Requests go out from your own connection &mdash; because you're the one making them, through your agent.</p>
+    </div>
+    <div class="feature-card reveal reveal-delay-5">
+      <span class="feature-icon">&#x1f916;</span>
+      <h3>MCP Native</h3>
+      <p>Designed for AI agents from day one. Works instantly with Claude Code, Cursor, Windsurf, and any MCP-compatible client. One command to install.</p>
+    </div>
+    <div class="feature-card reveal reveal-delay-5">
+      <span class="feature-icon">&#x2764;</span>
+      <h3>Free &amp; Open Source</h3>
+      <p>Wick is MIT-licensed and costs nothing to run. From the team behind Lantern &mdash; trusted by millions for internet freedom since 2013.</p>
+    </div>
+  </div>
+</section>
+
+<!-- How it works -->
+<section class="how" id="install">
+  <div class="how-header reveal">
+    <div class="section-label">Get started</div>
+    <h2>Three commands. That's it.</h2>
+  </div>
+  <div class="steps">
+    <div class="step reveal">
+      <div class="step-num">01</div>
+      <div>
+        <h3>Install</h3>
+        <p>One line. Homebrew on macOS, or grab the binary from GitHub releases.</p>
+        <code>brew install getlantern/tap/wick</code>
+      </div>
+    </div>
+    <div class="step reveal reveal-delay-1">
+      <div class="step-num">02</div>
+      <div>
+        <h3>Setup</h3>
+        <p>Wick auto-detects your MCP clients and configures them.</p>
+        <code>wick setup</code>
+      </div>
+    </div>
+    <div class="step reveal reveal-delay-2">
+      <div class="step-num">03</div>
+      <div>
+        <h3>Use</h3>
+        <p>Your agent now has <code>wick_fetch</code>. Ask it to read any webpage. It just works.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Compatibility -->
+<section class="compat reveal">
+  <h2>Works with your tools</h2>
+  <div class="compat-logos">
+    <div class="compat-item">
+      <div class="compat-icon">&gt;_</div>
+      Claude Code
+    </div>
+    <div class="compat-item">
+      <div class="compat-icon">&#x25B6;</div>
+      Cursor
+    </div>
+    <div class="compat-item">
+      <div class="compat-icon">&#x2756;</div>
+      Windsurf
+    </div>
+    <div class="compat-item">
+      <div class="compat-icon">&#x26A1;</div>
+      Any MCP Client
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta">
+  <h2 class="reveal">Light the <em>wick</em></h2>
+  <p class="reveal reveal-delay-1">Give your AI agent the web access it deserves.<br>Free, open source, and ready in 30 seconds.</p>
+  <div class="reveal reveal-delay-2">
+    <a href="https://github.com/myleshorton/wick" class="btn-primary">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+      Get Wick on GitHub
+    </a>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-brand">
+      Wick &mdash; by <a href="https://getlantern.org">Lantern</a> &middot; The part of the lantern that actually burns.
+    </div>
+    <ul class="footer-links">
+      <li><a href="https://github.com/myleshorton/wick">GitHub</a></li>
+      <li><a href="https://github.com/myleshorton/wick/issues">Issues</a></li>
+      <li><a href="https://getlantern.org">Lantern</a></li>
+    </ul>
+  </div>
+</footer>
+
+<script>
+// Scroll-triggered reveals
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+    }
+  });
+}, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+// Nav scroll effect
+const nav = document.getElementById('nav');
+window.addEventListener('scroll', () => {
+  nav.classList.toggle('scrolled', window.scrollY > 60);
+});
+
+// Copy install command
+function copyInstall(el) {
+  const text = 'brew install getlantern/tap/wick && wick setup';
+  navigator.clipboard.writeText(text).then(() => {
+    const copied = el.querySelector('.copied');
+    copied.classList.add('show');
+    setTimeout(() => copied.classList.remove('show'), 2000);
+  });
+}
+
+// Smooth scroll for anchor links
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    const target = document.querySelector(a.getAttribute('href'));
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+});
+</script>
+
+</body>
+</html>
