@@ -1,0 +1,21 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.myleshorton/wick",
+  "title": "Wick",
+  "description": "Browser-grade web access for AI agents. Fetches any webpage, returns clean markdown.",
+  "repository": {
+    "url": "https://github.com/myleshorton/wick",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "wick-mcp",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

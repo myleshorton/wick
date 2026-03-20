@@ -1,0 +1,5 @@
+#!/bin/sh
+# Stub that gets replaced by the real binary during postinstall.
+# If you see this, run: npm run postinstall
+echo "Error: wick binary not installed. Run: npm run postinstall" >&2
+exit 1
