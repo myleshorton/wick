@@ -1,0 +1,6 @@
+/wick
+*.dylib
+*.so
+*.dll
+.wick/
+.DS_Store
