@@ -884,7 +884,7 @@ footer {
   </div>
   <div class="hero-install">
     <div class="install-code" onclick="copyInstall(this)">
-      <code><span>$</span> brew install wick && wick setup</code>
+      <code><span>$</span> brew tap myleshorton/wick && brew install wick && wick setup</code>
       <button class="copy-btn" aria-label="Copy to clipboard">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
       </button>
@@ -1012,7 +1012,7 @@ footer {
       <div>
         <h3>Install</h3>
         <p>One line. Homebrew on macOS, or grab the binary from GitHub releases.</p>
-        <code>brew install wick</code>
+        <code>brew tap myleshorton/wick && brew install wick</code>
       </div>
     </div>
     <div class="step reveal reveal-delay-1">
@@ -1102,7 +1102,7 @@ window.addEventListener('scroll', () => {
 
 // Copy install command
 function copyInstall(el) {
-  const text = 'brew install wick && wick setup';
+  const text = 'brew tap myleshorton/wick && brew install wick && wick setup';
   navigator.clipboard.writeText(text).then(() => {
     const copied = el.querySelector('.copied');
     copied.classList.add('show');
