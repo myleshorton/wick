@@ -1,6 +1,6 @@
-# Flint: Browser-Grade Web Access for AI Agents
+# Wick: Browser-Grade Web Access for AI Agents
 
-> *The spark that lights the lantern.*
+> *The part of the lantern that actually burns.*
 
 **Status:** Draft
 **Authors:** Myles Horton, Adam Fisk
@@ -30,7 +30,7 @@
 
 AI agents are increasingly capable but effectively blind on the web. When Claude Code, Cursor, or any MCP-compatible agent tries to fetch a webpage, it sends a request that screams "I am a bot" — wrong TLS fingerprint, wrong HTTP/2 framing, datacenter IP, no cookies, no JavaScript execution. The result: blocked by Cloudflare, served a CAPTCHA, or fed a degraded response.
 
-Flint gives AI agents the same web access their human operators have. Not by routing through third-party residential IP pools (legally radioactive after Google's IPIDEA takedown and the FBI's March 2026 PSA), but by using Chrome's actual network stack and the user's own residential IP — because the user IS the one making the request, through their agent.
+Wick gives AI agents the same web access their human operators have. Not by routing through third-party residential IP pools (legally radioactive after Google's IPIDEA takedown and the FBI's March 2026 PSA), but by using Chrome's actual network stack and the user's own residential IP — because the user IS the one making the request, through their agent.
 
 ---
 
@@ -73,7 +73,7 @@ The market for agent web access exists, is growing fast, and has no dominant pla
 
 ## Solution
 
-Flint is a lightweight local daemon + optional cloud service that gives AI agents browser-grade HTTP access through Chrome's actual network stack (Cronet), exiting from the user's own residential IP.
+Wick is a lightweight local daemon + optional cloud service that gives AI agents browser-grade HTTP access through Chrome's actual network stack (Cronet), exiting from the user's own residential IP.
 
 ### Core principles
 
@@ -93,12 +93,12 @@ Flint is a lightweight local daemon + optional cloud service that gives AI agent
 ┌─────────────────────────────────────────────────────────────┐
 │  AI Agent (Claude Code / Cursor / any MCP client)           │
 │                                                             │
-│  MCP tool call: flint_fetch(url, options)                   │
+│  MCP tool call: wick_fetch(url, options)                   │
 └──────────────────────┬──────────────────────────────────────┘
                        │ JSON-RPC (stdio or HTTP)
                        ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  Flint Daemon (local, ~15MB)                                │
+│  Wick Daemon (local, ~15MB)                                │
 │                                                             │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
 │  │ MCP Server   │  │ Request      │  │ Response          │  │
@@ -136,7 +136,7 @@ Flint is a lightweight local daemon + optional cloud service that gives AI agent
            │ MCP tool call
            ▼
 ┌──────────────────────┐         ┌──────────────────────────┐
-│  Flint Daemon        │────────▶│  Flint Cloud             │
+│  Wick Daemon        │────────▶│  Wick Cloud             │
 │  (local)             │  API    │                          │
 │                      │◀────────│  ┌──────────────────┐    │
 │  Routes JS-required  │         │  │ Headless Chrome   │    │
@@ -160,7 +160,7 @@ Flint is a lightweight local daemon + optional cloud service that gives AI agent
 
 When a request requires JavaScript rendering (cloud headless Chrome), the traffic can optionally be routed back through the user's device to preserve their residential IP:
 
-1. Flint daemon establishes a WireGuard tunnel to Flint Cloud
+1. Wick daemon establishes a WireGuard tunnel to Wick Cloud
 2. Headless Chrome on cloud renders the page
 3. Outbound HTTP from the Chrome instance routes through the WireGuard tunnel
 4. Traffic exits from the user's residential IP
@@ -208,7 +208,7 @@ import (
     cronet "github.com/sagernet/cronet-go"
 )
 
-func NewFlintClient() *http.Client {
+func NewWickClient() *http.Client {
     engine := cronet.NewEngine()
     params := cronet.NewEngineParams()
     params.SetEnableHTTP2(true)
@@ -279,9 +279,9 @@ AI agents don't want raw HTML. They want clean, LLM-friendly content. The respon
 
 ### Cookie Persistence
 
-A critical component. Many sites work fine after the first visit sets cookies (Cloudflare `cf_clearance`, session tokens, consent cookies). Flint maintains a persistent cookie store per user:
+A critical component. Many sites work fine after the first visit sets cookies (Cloudflare `cf_clearance`, session tokens, consent cookies). Wick maintains a persistent cookie store per user:
 
-- Stored in the user's config directory (`~/.flint/cookies.db`)
+- Stored in the user's config directory (`~/.wick/cookies.db`)
 - SQLite-backed (like Chrome's own cookie store)
 - Respects cookie expiry, domain scoping, Secure/HttpOnly flags
 - Shared across all agent sessions
@@ -306,23 +306,23 @@ For JavaScript-heavy sites (SPAs, Cloudflare JS challenges, dynamically loaded c
 - Instance reuse with cookie/state passthrough
 
 **Residential IP integration:**
-When residential IP is needed, the Chrome instance's traffic routes through a WireGuard tunnel back to the user's Flint daemon, then exits from their IP. From the target site's perspective, it looks like a normal Chrome user on a residential connection — because that's what it is.
+When residential IP is needed, the Chrome instance's traffic routes through a WireGuard tunnel back to the user's Wick daemon, then exits from their IP. From the target site's perspective, it looks like a normal Chrome user on a residential connection — because that's what it is.
 
 ---
 
 ## MCP Interface
 
-Flint exposes its capabilities through the Model Context Protocol, making it automatically available to any MCP-compatible agent (Claude Code, Cursor, Windsurf, etc.).
+Wick exposes its capabilities through the Model Context Protocol, making it automatically available to any MCP-compatible agent (Claude Code, Cursor, Windsurf, etc.).
 
 ### Tools
 
-#### `flint_fetch`
+#### `wick_fetch`
 
 Primary tool. Fetches a URL with browser-grade fidelity.
 
 ```json
 {
-  "name": "flint_fetch",
+  "name": "wick_fetch",
   "description": "Fetch a web page using Chrome's network stack with browser-grade TLS fingerprinting. Returns clean, LLM-friendly content. Falls back to JavaScript rendering for dynamic pages.",
   "inputSchema": {
     "type": "object",
@@ -361,18 +361,18 @@ Primary tool. Fetches a URL with browser-grade fidelity.
 **Example agent interaction:**
 ```
 Agent: I need to read the documentation at https://example.com/docs/api
-       [calls flint_fetch with url="https://example.com/docs/api"]
+       [calls wick_fetch with url="https://example.com/docs/api"]
 
-Flint: Returns markdown content of the page, clean and ready for the LLM context window.
+Wick: Returns markdown content of the page, clean and ready for the LLM context window.
 ```
 
-#### `flint_search`
+#### `wick_search`
 
 Web search with result fetching. Searches via a search engine, then optionally fetches top results.
 
 ```json
 {
-  "name": "flint_search",
+  "name": "wick_search",
   "description": "Search the web and optionally fetch top results with browser-grade access.",
   "inputSchema": {
     "type": "object",
@@ -402,13 +402,13 @@ Web search with result fetching. Searches via a search engine, then optionally f
 }
 ```
 
-#### `flint_session`
+#### `wick_session`
 
 Manage browser sessions (cookies, auth state) across requests.
 
 ```json
 {
-  "name": "flint_session",
+  "name": "wick_session",
   "description": "Manage persistent browser sessions for multi-step web interactions.",
   "inputSchema": {
     "type": "object",
@@ -430,10 +430,10 @@ Manage browser sessions (cookies, auth state) across requests.
 
 ### Transport
 
-Flint's MCP server supports two transports:
+Wick's MCP server supports two transports:
 
 1. **stdio** (default): For local integration with Claude Code, Cursor, etc. The daemon is launched as a subprocess.
-2. **HTTP + SSE**: For remote/cloud deployment. Enables team sharing of a single Flint instance.
+2. **HTTP + SSE**: For remote/cloud deployment. Enables team sharing of a single Wick instance.
 
 ### Agent configuration
 
@@ -441,8 +441,8 @@ Claude Code `settings.json`:
 ```json
 {
   "mcpServers": {
-    "flint": {
-      "command": "flint",
+    "wick": {
+      "command": "wick",
       "args": ["serve", "--mcp"],
       "env": {
         "FLINT_API_KEY": "your-key-here"
@@ -454,10 +454,10 @@ Claude Code `settings.json`:
 
 Or via Homebrew one-liner:
 ```bash
-brew install getlantern/tap/flint && flint setup
+brew install getlantern/tap/wick && wick setup
 ```
 
-`flint setup` auto-detects installed MCP clients (Claude Code, Cursor, etc.) and configures them.
+`wick setup` auto-detects installed MCP clients (Claude Code, Cursor, etc.) and configures them.
 
 ---
 
@@ -467,9 +467,9 @@ brew install getlantern/tap/flint && flint setup
 
 Cronet's authentic Chrome fingerprint + the user's residential IP + persistent cookies means most requests never trigger a CAPTCHA. The signals that trigger challenges (TLS mismatch, HTTP/2 anomalies, datacenter IP, missing cookies) are all addressed by the core architecture.
 
-### Layer 2: User-in-the-loop (Flint's differentiator)
+### Layer 2: User-in-the-loop (Wick's differentiator)
 
-When a CAPTCHA is detected, Flint leverages its unique position as a local daemon on the user's device:
+When a CAPTCHA is detected, Wick leverages its unique position as a local daemon on the user's device:
 
 ```
 Cronet request returns CAPTCHA page
@@ -481,7 +481,7 @@ Cronet request returns CAPTCHA page
     │   └─ Custom JS challenge (Cloudflare managed challenge page)
     │
     ├─ Native OS notification:
-    │   "Flint: Your AI agent needs help with a CAPTCHA on example.com"
+    │   "Wick: Your AI agent needs help with a CAPTCHA on example.com"
     │
     ├─ User clicks notification → minimal webview opens
     │   (macOS: WKWebView, Windows: WebView2, Linux: WebKitGTK)
@@ -507,7 +507,7 @@ Cronet request returns CAPTCHA page
 
 **Implementation notes:**
 
-The webview must be configured to match Flint's Cronet cookies and state, so the clearance token is valid for subsequent Cronet requests. This requires sharing the cookie store between Cronet and the webview, or extracting and replaying cookies between them.
+The webview must be configured to match Wick's Cronet cookies and state, so the clearance token is valid for subsequent Cronet requests. This requires sharing the cookie store between Cronet and the webview, or extracting and replaying cookies between them.
 
 ### Layer 3: Automated solving (paid add-on)
 
@@ -531,12 +531,12 @@ Cloudflare's "managed challenge" (the "Checking your browser..." interstitial) i
 ### Primary: MCP tool directories + package managers
 
 ```
-brew install getlantern/tap/flint    # macOS
-npm install -g @flint/cli            # cross-platform (wraps Go binary)
-go install github.com/myleshorton/flint@latest  # Go developers
+brew install getlantern/tap/wick    # macOS
+npm install -g @wick/cli            # cross-platform (wraps Go binary)
+go install github.com/myleshorton/wick@latest  # Go developers
 ```
 
-The `flint setup` command auto-configures all detected MCP clients.
+The `wick setup` command auto-configures all detected MCP clients.
 
 ### Secondary: Agent documentation and word-of-mouth
 
@@ -544,17 +544,17 @@ When an MCP client uses WebFetch and gets blocked, the error message is visible 
 
 ### Tertiary: IDE extensions
 
-VS Code / JetBrains extensions that bundle Flint and add a "Fetch with Flint" command. These also serve as MCP server configuration helpers.
+VS Code / JetBrains extensions that bundle Wick and add a "Fetch with Wick" command. These also serve as MCP server configuration helpers.
 
 ### Growth loop
 
 ```
-Developer installs Flint (free) for their AI agent
-    → Agent uses Flint to access previously-blocked sites
+Developer installs Wick (free) for their AI agent
+    → Agent uses Wick to access previously-blocked sites
     → Developer hits a JS-heavy site that needs cloud rendering
     → Upgrade to paid tier
-    → Developer recommends Flint to team (multiplayer via HTTP transport)
-    → Team installs Flint
+    → Developer recommends Wick to team (multiplayer via HTTP transport)
+    → Team installs Wick
 ```
 
 ---
@@ -594,7 +594,7 @@ The free tier costs us nothing — it runs entirely on the user's hardware. Free
 
 ### Direct competitors
 
-| Company | Approach | Strengths | Weaknesses vs. Flint |
+| Company | Approach | Strengths | Weaknesses vs. Wick |
 |---------|----------|-----------|---------------------|
 | **Bright Data MCP** | Cloud proxy with 150M+ residential IPs | Huge IP pool, 60+ MCP tools, enterprise brand | Ethically problematic IP sourcing history (Luminati/Hola), expensive, no local-first option, legally exposed |
 | **Firecrawl** | Cloud scraping + `/agent` endpoint | Open source, good extraction, 77% coverage | No TLS fingerprinting, cloud-only, no residential IP |
@@ -602,7 +602,7 @@ The free tier costs us nothing — it runs entirely on the user's hardware. Free
 | **Tavily** | Search API for RAG | $25M funding, strong AI-native positioning | Search-focused (not arbitrary URL access), no anti-detection |
 | **Playwright MCP** | Browser automation via accessibility tree | Free, built into Claude Code | No anti-detection, heavy (full browser per request), not designed for fetching |
 
-### Flint's moat
+### Wick's moat
 
 1. **Cronet (authentic Chrome fingerprint)**: Not mimicry. The actual network stack. Competitors use uTLS at best, nothing at worst.
 2. **Local-first architecture**: Free tier costs us $0. Competitors run cloud infrastructure for every request.
@@ -620,10 +620,10 @@ The free tier costs us nothing — it runs entirely on the user's hardware. Free
 
 ## Legal Analysis
 
-### Why Flint is legally defensible
+### Why Wick is legally defensible
 
 **The core architecture is clean:**
-- The user installs Flint on their device
+- The user installs Wick on their device
 - The user's AI agent makes requests on the user's behalf
 - Requests exit from the user's own IP address
 - This is functionally identical to the user browsing with Chrome
@@ -634,9 +634,9 @@ The free tier costs us nothing — it runs entirely on the user's hardware. Free
 - **Meta v. Bright Data (2024)**: Scraping public-facing data without logging in is not a ToS violation.
 - **Van Buren v. United States (2021, SCOTUS)**: CFAA only covers accessing systems with no authorization, not exceeding authorized access.
 
-**What Flint does NOT do (critical distinctions):**
+**What Wick does NOT do (critical distinctions):**
 
-| Practice | Legal risk | Flint's position |
+| Practice | Legal risk | Wick's position |
 |----------|-----------|-----------------|
 | Pooled residential IPs | High (FBI PSA, Google/IPIDEA takedown) | Does not pool IPs. User's own IP only. |
 | Bypassing authentication | High (CFAA) | Never bypasses login walls. Public pages only. |
@@ -648,9 +648,9 @@ The free tier costs us nothing — it runs entirely on the user's hardware. Free
 
 **Default behavior:** Respect robots.txt. If a site disallows the path, return an error with an explanation.
 
-**User override:** `flint_fetch(url, respect_robots=false)` — the user can choose to override, accepting responsibility. This mirrors Chrome's behavior (browsers don't check robots.txt for human-initiated requests).
+**User override:** `wick_fetch(url, respect_robots=false)` — the user can choose to override, accepting responsibility. This mirrors Chrome's behavior (browsers don't check robots.txt for human-initiated requests).
 
-**Rationale:** robots.txt is advisory (RFC 9309). It's designed for crawlers operating at scale, not individual page fetches by a user's agent. A human browsing to the same URL in Chrome wouldn't check robots.txt. Flint defaults to respecting it as a good-faith gesture, but the user has the final say.
+**Rationale:** robots.txt is advisory (RFC 9309). It's designed for crawlers operating at scale, not individual page fetches by a user's agent. A human browsing to the same URL in Chrome wouldn't check robots.txt. Wick defaults to respecting it as a good-faith gesture, but the user has the final say.
 
 ---
 
@@ -695,13 +695,13 @@ The free tier costs us nothing — it runs entirely on the user's hardware. Free
 - [ ] Request pipeline: URL → headers → Cronet → response
 - [ ] Cookie persistence (SQLite store)
 - [ ] HTML → Markdown content extraction (readability algorithm)
-- [ ] MCP server (stdio transport) exposing `flint_fetch`
-- [ ] `flint setup` auto-configuration for Claude Code
+- [ ] MCP server (stdio transport) exposing `wick_fetch`
+- [ ] `wick setup` auto-configuration for Claude Code
 - [ ] macOS build + Homebrew formula
 - [ ] Linux amd64 build
 - [ ] Basic test suite against known-blocked sites
 
-**Deliverable:** `brew install flint && flint setup` gives Claude Code browser-grade web access.
+**Deliverable:** `brew install wick && wick setup` gives Claude Code browser-grade web access.
 
 ### Phase 2: CAPTCHA + Polish (Weeks 5-8)
 
@@ -712,12 +712,12 @@ The free tier costs us nothing — it runs entirely on the user's hardware. Free
 - [ ] Minimal webview for CAPTCHA solving (WKWebView / WebView2 / WebKitGTK)
 - [ ] Cookie extraction from webview → Cronet cookie store
 - [ ] Windows build + installer
-- [ ] `flint_search` tool (web search + result fetching)
-- [ ] `flint_session` tool (cookie management)
+- [ ] `wick_search` tool (web search + result fetching)
+- [ ] `wick_session` tool (cookie management)
 - [ ] Error messages with helpful context for agents
 - [ ] Rate limiting and backoff logic
 
-**Deliverable:** Flint handles Cloudflare-protected sites gracefully across macOS, Linux, Windows.
+**Deliverable:** Wick handles Cloudflare-protected sites gracefully across macOS, Linux, Windows.
 
 ### Phase 3: Cloud Tier (Weeks 9-14)
 
@@ -733,14 +733,14 @@ The free tier costs us nothing — it runs entirely on the user's hardware. Free
 - [ ] Usage metering and quota enforcement
 - [ ] HTTP + SSE MCP transport for team/remote use
 
-**Deliverable:** `flint_fetch(url, wait_for_js=true)` renders JavaScript-heavy pages in the cloud.
+**Deliverable:** `wick_fetch(url, wait_for_js=true)` renders JavaScript-heavy pages in the cloud.
 
 ### Phase 4: Scale + Ecosystem (Weeks 15-20)
 
 **Goal:** Growth features, integrations, and ecosystem play.
 
-- [ ] npm package (`@flint/cli`) for cross-platform Node.js distribution
-- [ ] VS Code extension (MCP configuration + "Fetch with Flint" command)
+- [ ] npm package (`@wick/cli`) for cross-platform Node.js distribution
+- [ ] VS Code extension (MCP configuration + "Fetch with Wick" command)
 - [ ] Automated CAPTCHA solving integration (CapSolver/2Captcha)
 - [ ] Batch fetching (parallel URL list processing)
 - [ ] Caching layer (avoid redundant fetches for popular docs pages)
@@ -750,11 +750,11 @@ The free tier costs us nothing — it runs entirely on the user's hardware. Free
 
 ### Future: Content Licensing (Phase 5+)
 
-If Flint gains traction and builds relationships with frequently-accessed sites, explore the content licensing marketplace model:
+If Wick gains traction and builds relationships with frequently-accessed sites, explore the content licensing marketplace model:
 
 - Publishers register sites and set per-access pricing
 - Agents authenticate and pay per access
-- Flint takes a transaction fee
+- Wick takes a transaction fee
 - Content served in LLM-optimized format
 - Everyone wins: publishers get compensated, agents get reliable access, no adversarial cat-and-mouse
 
@@ -797,7 +797,7 @@ These are estimates based on Lantern's experience with anti-detection and public
 
 Components from the Lantern codebase that can be directly leveraged:
 
-| Component | Lantern Source | Flint Use |
+| Component | Lantern Source | Wick Use |
 |-----------|---------------|-----------|
 | WireGuard tunnel | `getlantern/wireguard-go` | Residential IP routing for cloud tier |
 | Cronet Go bindings | `getlantern/cronet-go` (stale) → use `sagernet/cronet-go` | Core network engine |
@@ -810,7 +810,7 @@ Components from the Lantern codebase that can be directly leveraged:
 
 ## Appendix C: Example Agent Interaction
 
-### Before Flint
+### Before Wick
 
 ```
 User: "Read the API docs at https://example.com/docs/api"
@@ -825,13 +825,13 @@ Agent: I'm sorry, I wasn't able to access that page. The site appears to
        and pasting it here, or I can work with what I know about their API.
 ```
 
-### After Flint
+### After Wick
 
 ```
 User: "Read the API docs at https://example.com/docs/api"
 
 Agent: I'll fetch that page for you.
-       [uses flint_fetch tool]
+       [uses wick_fetch tool]
 
 Result: Clean markdown of the full API documentation
 
@@ -844,14 +844,14 @@ Agent: Here's what I found in their API docs:
 ```
 User: "Check the pricing on https://protected-site.com/pricing"
 
-Agent: [uses flint_fetch tool]
+Agent: [uses wick_fetch tool]
 
-Flint: [detects Cloudflare challenge]
-       [sends OS notification: "Flint: CAPTCHA needed for protected-site.com"]
+Wick: [detects Cloudflare challenge]
+       [sends OS notification: "Wick: CAPTCHA needed for protected-site.com"]
 
 User: [clicks notification, solves CAPTCHA in 5 seconds]
 
-Flint: [captures cf_clearance cookie, retries request]
+Wick: [captures cf_clearance cookie, retries request]
 
 Result: Clean markdown of the pricing page
 
