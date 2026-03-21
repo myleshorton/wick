@@ -10,7 +10,7 @@ const CHROME_FULL: &str = "143.0.7499.109";
 /// HTTP client with Chrome-equivalent headers.
 /// With the `cronet` feature, uses Chromium's actual network stack.
 /// Without it, uses reqwest with Chrome-like headers (weaker fingerprint).
-pub struct Client {
+pub struct Client { // Debug not derived: inner types don't support it
     #[cfg(feature = "cronet")]
     engine: cronet::Engine,
     #[cfg(not(feature = "cronet"))]
@@ -103,7 +103,7 @@ fn chrome_headers_reqwest() -> reqwest::header::HeaderMap {
         "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
     ));
     h.insert("Accept-Language", HeaderValue::from_static("en-US,en;q=0.9"));
-    h.insert("Accept-Encoding", HeaderValue::from_static("gzip, deflate, br, zstd"));
+    h.insert("Accept-Encoding", HeaderValue::from_static("gzip, deflate, br"));
     h.insert("Cache-Control", HeaderValue::from_static("max-age=0"));
     h.insert(
         "Sec-Ch-Ua",

@@ -60,7 +60,7 @@ async fn main() -> Result<()> {
                 .with_ansi(false)
                 .init();
 
-            let server = mcp::WickServer::new();
+            let server = mcp::WickServer::new()?;
             let service = server
                 .serve(stdio())
                 .await

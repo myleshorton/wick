@@ -72,7 +72,7 @@ for entry in "${HELPERS[@]}"; do
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>LSUIElement</key>
-    <string>1</string>
+    <true/>
     <key>LSMinimumSystemVersion</key>
     <string>12.0</string>
     <key>NSSupportsAutomaticGraphicsSwitching</key>

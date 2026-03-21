@@ -25,6 +25,7 @@
 #include "include/capi/cef_load_handler_capi.h"
 #include "include/capi/cef_render_handler_capi.h"
 #include "include/capi/cef_string_visitor_capi.h"
+#include "include/cef_api_hash.h"
 
 // ── State ─────────────────────────────────────────────────────
 
@@ -184,10 +185,19 @@ static void render_url(const char* url) {
     frame->load_url(frame, &cef_url);
     cef_string_clear(&cef_url);
 
-    // Pump message loop until page loads
-    while (!g_page_loaded) {
+    // Pump message loop until page loads (with 30s timeout)
+    int ticks = 0;
+    while (!g_page_loaded && ticks < 3000) {
         cef_do_message_loop_work();
         usleep(10000); // 10ms
+        ticks++;
+    }
+
+    if (!g_page_loaded) {
+        // Timed out waiting for page load
+        fprintf(stdout, "0\n");
+        fflush(stdout);
+        return;
     }
 
     // Extract source HTML
@@ -196,10 +206,18 @@ static void render_url(const char* url) {
         frame->get_source(frame, &g_html_visitor);
     }
 
-    // Pump until visitor fires
-    while (!g_source_ready) {
+    // Pump until visitor fires (with 5s timeout)
+    ticks = 0;
+    while (!g_source_ready && ticks < 500) {
         cef_do_message_loop_work();
         usleep(10000);
+        ticks++;
+    }
+
+    if (!g_source_ready) {
+        fprintf(stdout, "0\n");
+        fflush(stdout);
+        return;
     }
 
     // Write length-prefixed response
@@ -215,7 +233,10 @@ static void render_url(const char* url) {
 int main(int argc, char* argv[]) {
     char exe_buf[4096];
     uint32_t exe_buf_size = sizeof(exe_buf);
-    _NSGetExecutablePath(exe_buf, &exe_buf_size);
+    if (_NSGetExecutablePath(exe_buf, &exe_buf_size) != 0) {
+        fprintf(stderr, "wick-renderer: executable path too long\n");
+        return 1;
+    }
 
     int new_argc = argc + 2;
     char** new_argv = malloc(sizeof(char*) * (new_argc + 1));
@@ -228,7 +249,10 @@ int main(int argc, char* argv[]) {
 
     cef_main_args_t main_args = { .argc = new_argc, .argv = new_argv };
     int exit_code = cef_execute_process(&main_args, NULL, NULL);
-    if (exit_code >= 0) return exit_code;
+    if (exit_code >= 0) {
+        free(new_argv);
+        return exit_code;
+    }
 
     // Support one-shot mode: wick-renderer <url> (backward compat)
     int one_shot = (argc >= 2 && strncmp(argv[1], "--", 2) != 0);

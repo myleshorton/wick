@@ -38,17 +38,26 @@ pub struct SessionInput {
 
 // ── Server ────────────────────────────────────────────────────
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct WickServer {
     tool_router: ToolRouter<Self>,
+    client: std::sync::Arc<Client>,
+}
+
+impl std::fmt::Debug for WickServer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WickServer").finish()
+    }
 }
 
 #[tool_router]
 impl WickServer {
-    pub fn new() -> Self {
-        Self {
+    pub fn new() -> Result<Self, anyhow::Error> {
+        let client = Client::new()?;
+        Ok(Self {
             tool_router: Self::tool_router(),
-        }
+            client: std::sync::Arc::new(client),
+        })
     }
 
     #[tool(
@@ -59,9 +68,7 @@ impl WickServer {
         &self,
         Parameters(input): Parameters<FetchInput>,
     ) -> Result<CallToolResult, McpError> {
-        let client = Client::new().map_err(|e| {
-            McpError::internal_error(format!("engine: {}", e), None)
-        })?;
+        let client = &self.client;
 
         let format = input
             .format
@@ -70,7 +77,7 @@ impl WickServer {
             .unwrap_or(Format::Markdown);
         let respect_robots = input.respect_robots.unwrap_or(true);
 
-        let result = fetch::fetch(&client, &input.url, format, respect_robots)
+        let result = fetch::fetch(client, &input.url, format, respect_robots)
             .await
             .map_err(|e| {
                 McpError::internal_error(format!("fetch failed: {}", e), None)

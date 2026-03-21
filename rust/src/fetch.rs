@@ -63,7 +63,7 @@ pub async fn fetch(
                     content: extracted.content,
                     title: extracted.title,
                     url: url.to_string(),
-                    status_code: 200,
+                    status_code: 0, // CEF doesn't report HTTP status yet
                     timing_ms: start.elapsed().as_millis() as u64,
                 });
             }

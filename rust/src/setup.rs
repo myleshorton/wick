@@ -52,7 +52,8 @@ fn setup_claude_json(wick_path: &str) -> Result<()> {
 
     let mut config: serde_json::Map<String, serde_json::Value> = if config_path.exists() {
         let data = std::fs::read_to_string(&config_path)?;
-        serde_json::from_str(&data).unwrap_or_default()
+        serde_json::from_str(&data)
+            .map_err(|e| anyhow::anyhow!("malformed JSON in {}: {}", config_path.display(), e))?
     } else {
         serde_json::Map::new()
     };
@@ -88,7 +89,8 @@ fn setup_cursor(wick_path: &str) -> Result<()> {
 
     let mut config: serde_json::Map<String, serde_json::Value> = if config_path.exists() {
         let data = std::fs::read_to_string(&config_path)?;
-        serde_json::from_str(&data).unwrap_or_default()
+        serde_json::from_str(&data)
+            .map_err(|e| anyhow::anyhow!("malformed JSON in {}: {}", config_path.display(), e))?
     } else {
         serde_json::Map::new()
     };
