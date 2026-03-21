@@ -228,8 +228,8 @@ int main(int argc, char* argv[]) {
     cef_string_utf8_to_utf16(exe_real, strlen(exe_real), &settings.browser_subprocess_path);
 
     char cache_path[4096];
-    snprintf(cache_path, sizeof(cache_path), "%s/.wick/cef-cache",
-             getenv("HOME") ? getenv("HOME") : "/tmp");
+    snprintf(cache_path, sizeof(cache_path), "%s/.wick/cef-cache-%d",
+             getenv("HOME") ? getenv("HOME") : "/tmp", getpid());
     cef_string_utf8_to_utf16(cache_path, strlen(cache_path), &settings.root_cache_path);
 
     if (!cef_initialize(&main_args, &settings, NULL, NULL)) {
@@ -258,6 +258,16 @@ int main(int argc, char* argv[]) {
     cef_run_message_loop();
 
     cef_shutdown();
+
+    // Clean up the per-process cache directory
+    char rm_cmd[4096];
+    snprintf(rm_cmd, sizeof(rm_cmd), "%s/.wick/cef-cache-%d",
+             getenv("HOME") ? getenv("HOME") : "/tmp", getpid());
+    // Best-effort recursive delete
+    char rm_full[4200];
+    snprintf(rm_full, sizeof(rm_full), "rm -rf '%s'", rm_cmd);
+    system(rm_full);
+
     free(new_argv);
     return 0;
 }

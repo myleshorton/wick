@@ -8,6 +8,12 @@ const RENDER_TIMEOUT: Duration = Duration::from_secs(30);
 /// Render a page using the CEF renderer subprocess.
 /// Returns the fully-rendered HTML after JavaScript execution.
 pub async fn render(url: &str) -> Result<String> {
+    // Clean up stale CEF cache directories from previous runs.
+    // CEF single-process mode uses singleton locks that prevent reuse.
+    // Brief delay lets the OS fully release resources from a prior renderer.
+    cleanup_cef_caches();
+    tokio::time::sleep(Duration::from_millis(500)).await;
+
     let renderer_path = find_renderer()?;
 
     // The renderer needs the CEF framework accessible at
@@ -31,6 +37,14 @@ pub async fn render(url: &str) -> Result<String> {
         )
     })?;
 
+    let html = String::from_utf8_lossy(&output.stdout).into_owned();
+
+    // CEF sometimes crashes during shutdown (cef_shutdown SIGTRAP) even though
+    // rendering succeeded. Accept the output if we got HTML regardless of exit code.
+    if !html.is_empty() {
+        return Ok(html);
+    }
+
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         bail!(
@@ -40,12 +54,7 @@ pub async fn render(url: &str) -> Result<String> {
         );
     }
 
-    let html = String::from_utf8_lossy(&output.stdout).into_owned();
-    if html.is_empty() {
-        bail!("wick-renderer returned empty output");
-    }
-
-    Ok(html)
+    bail!("wick-renderer returned empty output")
 }
 
 /// Check if CEF renderer is available.
@@ -78,6 +87,21 @@ fn find_renderer() -> Result<PathBuf> {
         "wick-renderer not found. \
          Run 'wick setup --with-js' to install CEF for JavaScript rendering."
     )
+}
+
+fn cleanup_cef_caches() {
+    if let Some(home) = std::env::var_os("HOME") {
+        let wick_dir = PathBuf::from(home).join(".wick");
+        if let Ok(entries) = std::fs::read_dir(&wick_dir) {
+            for entry in entries.flatten() {
+                if let Some(name) = entry.file_name().to_str() {
+                    if name.starts_with("cef-cache-") {
+                        let _ = std::fs::remove_dir_all(entry.path());
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn which(name: &str) -> Result<PathBuf> {
