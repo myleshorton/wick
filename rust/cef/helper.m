@@ -33,51 +33,50 @@ static void init_base(cef_base_ref_counted_t* base, size_t size) {
 // Makes CEF's JS environment match real Chrome's.
 
 static const char* STEALTH_JS =
-    // 1. chrome.runtime (most important — Cloudflare checks this)
+    // ── Helper: make spoofed functions look native ────────────
+    // Anti-spoofing detectors check toString() for [native code].
+    // This wrapper makes our functions return the native signature.
+    "(function() {"
+    "  var nativeFn = Function.prototype.toString;"
+    "  var fakeNatives = new WeakSet();"
+    "  window.__markNative = function(fn) { fakeNatives.add(fn); return fn; };"
+    "  Function.prototype.toString = function() {"
+    "    if (fakeNatives.has(this)) return 'function ' + (this.name || '') + '() { [native code] }';"
+    "    return nativeFn.call(this);"
+    "  };"
+    "  __markNative(Function.prototype.toString);"
+    "})();"
+
+    // ── 1. chrome.runtime (Cloudflare's primary check) ────────
     "if (!window.chrome) window.chrome = {};"
     "if (!window.chrome.runtime) {"
     "  window.chrome.runtime = {"
-    "    OnInstalledReason: {"
-    "      CHROME_UPDATE: 'chrome_update',"
-    "      INSTALL: 'install',"
-    "      SHARED_MODULE_UPDATE: 'shared_module_update',"
-    "      UPDATE: 'update'"
-    "    },"
-    "    OnRestartRequiredReason: {"
-    "      APP_UPDATE: 'app_update',"
-    "      OS_UPDATE: 'os_update',"
-    "      PERIODIC: 'periodic'"
-    "    },"
-    "    PlatformArch: {"
-    "      ARM: 'arm',"
-    "      ARM64: 'arm64',"
-    "      MIPS: 'mips',"
-    "      MIPS64: 'mips64',"
-    "      X86_32: 'x86-32',"
-    "      X86_64: 'x86-64'"
-    "    },"
-    "    PlatformOs: {"
-    "      ANDROID: 'android',"
-    "      CROS: 'cros',"
-    "      LINUX: 'linux',"
-    "      MAC: 'mac',"
-    "      OPENBSD: 'openbsd',"
-    "      WIN: 'win'"
-    "    },"
-    "    RequestUpdateCheckStatus: {"
-    "      NO_UPDATE: 'no_update',"
-    "      THROTTLED: 'throttled',"
-    "      UPDATE_AVAILABLE: 'update_available'"
-    "    },"
-    "    connect: function() { return { onDisconnect: { addListener: function() {} }, onMessage: { addListener: function() {} }, postMessage: function() {} }; },"
-    "    sendMessage: function() {},"
+    "    OnInstalledReason: {CHROME_UPDATE:'chrome_update',INSTALL:'install',SHARED_MODULE_UPDATE:'shared_module_update',UPDATE:'update'},"
+    "    OnRestartRequiredReason: {APP_UPDATE:'app_update',OS_UPDATE:'os_update',PERIODIC:'periodic'},"
+    "    PlatformArch: {ARM:'arm',ARM64:'arm64',MIPS:'mips',MIPS64:'mips64',X86_32:'x86-32',X86_64:'x86-64'},"
+    "    PlatformOs: {ANDROID:'android',CROS:'cros',LINUX:'linux',MAC:'mac',OPENBSD:'openbsd',WIN:'win'},"
+    "    RequestUpdateCheckStatus: {NO_UPDATE:'no_update',THROTTLED:'throttled',UPDATE_AVAILABLE:'update_available'},"
+    "    connect: __markNative(function connect() { return {onDisconnect:{addListener:function(){}},onMessage:{addListener:function(){}},postMessage:function(){}}; }),"
+    "    sendMessage: __markNative(function sendMessage() {}),"
     "    id: undefined"
     "  };"
     "}"
 
-    // 2. navigator.plugins (Cloudflare, Akamai check this)
+    // ── 2. chrome.app (secondary Cloudflare/BotD check) ───────
+    "if (!window.chrome.app) {"
+    "  window.chrome.app = {"
+    "    isInstalled: false,"
+    "    InstallState: {DISABLED:'disabled',INSTALLED:'installed',NOT_INSTALLED:'not_installed'},"
+    "    RunningState: {CANNOT_RUN:'cannot_run',READY_TO_RUN:'ready_to_run',RUNNING:'running'},"
+    "    getDetails: __markNative(function getDetails() { return null; }),"
+    "    getIsInstalled: __markNative(function getIsInstalled() { return false; }),"
+    "    runningState: __markNative(function runningState() { return 'cannot_run'; })"
+    "  };"
+    "}"
+
+    // ── 3. navigator.plugins (Cloudflare, Akamai) ─────────────
     "Object.defineProperty(navigator, 'plugins', {"
-    "  get: function() {"
+    "  get: __markNative(function plugins() {"
     "    var p = ["
     "      {name:'Chrome PDF Plugin',filename:'internal-pdf-viewer',description:'Portable Document Format',length:1,0:{type:'application/x-google-chrome-pdf',suffixes:'pdf',description:'Portable Document Format',enabledPlugin:null}},"
     "      {name:'Chrome PDF Viewer',filename:'mhjfbmdgcfjbbpaeojofohoefgiehjai',description:'',length:1,0:{type:'application/pdf',suffixes:'pdf',description:'',enabledPlugin:null}},"
@@ -87,12 +86,13 @@ static const char* STEALTH_JS =
     "    p.namedItem = function(n) { for(var i=0;i<this.length;i++) if(this[i].name===n) return this[i]; return null; };"
     "    p.refresh = function() {};"
     "    return p;"
-    "  }"
+    "  }),"
+    "  configurable: true"
     "});"
 
-    // 3. navigator.mimeTypes (must match plugins)
+    // ── 4. navigator.mimeTypes ────────────────────────────────
     "Object.defineProperty(navigator, 'mimeTypes', {"
-    "  get: function() {"
+    "  get: __markNative(function mimeTypes() {"
     "    var m = ["
     "      {type:'application/pdf',suffixes:'pdf',description:'',enabledPlugin:{name:'Chrome PDF Viewer'}},"
     "      {type:'application/x-google-chrome-pdf',suffixes:'pdf',description:'Portable Document Format',enabledPlugin:{name:'Chrome PDF Plugin'}},"
@@ -102,54 +102,126 @@ static const char* STEALTH_JS =
     "    m.item = function(i) { return this[i] || null; };"
     "    m.namedItem = function(n) { for(var i=0;i<this.length;i++) if(this[i].type===n) return this[i]; return null; };"
     "    return m;"
-    "  }"
+    "  }),"
+    "  configurable: true"
     "});"
 
-    // 4. chrome.csi and chrome.loadTimes (legacy APIs, some bots check)
-    "window.chrome.csi = function() {"
-    "  return {startE: Date.now(), onloadT: Date.now(), pageT: Date.now()/1000, tran: 15};"
-    "};"
-    "window.chrome.loadTimes = function() {"
+    // ── 5. chrome.csi / chrome.loadTimes (legacy APIs) ────────
+    "window.chrome.csi = __markNative(function csi() {"
+    "  return {startE:Date.now(),onloadT:Date.now(),pageT:Date.now()/1000,tran:15};"
+    "});"
+    "window.chrome.loadTimes = __markNative(function loadTimes() {"
     "  return {"
-    "    get requestTime() { return Date.now()/1000; },"
-    "    get startLoadTime() { return Date.now()/1000; },"
-    "    get commitLoadTime() { return Date.now()/1000; },"
-    "    get finishDocumentLoadTime() { return Date.now()/1000; },"
-    "    get finishLoadTime() { return Date.now()/1000; },"
-    "    get firstPaintTime() { return Date.now()/1000; },"
-    "    get firstPaintAfterLoadTime() { return 0; },"
-    "    get navigationType() { return 'Other'; },"
-    "    get wasFetchedViaSpdy() { return true; },"
-    "    get wasNpnNegotiated() { return true; },"
-    "    get npnNegotiatedProtocol() { return 'h2'; },"
-    "    get wasAlternateProtocolAvailable() { return false; },"
-    "    get connectionInfo() { return 'h2'; }"
+    "    get requestTime(){return Date.now()/1000},"
+    "    get startLoadTime(){return Date.now()/1000},"
+    "    get commitLoadTime(){return Date.now()/1000},"
+    "    get finishDocumentLoadTime(){return Date.now()/1000},"
+    "    get finishLoadTime(){return Date.now()/1000},"
+    "    get firstPaintTime(){return Date.now()/1000},"
+    "    get firstPaintAfterLoadTime(){return 0},"
+    "    get navigationType(){return 'Other'},"
+    "    get wasFetchedViaSpdy(){return true},"
+    "    get wasNpnNegotiated(){return true},"
+    "    get npnNegotiatedProtocol(){return 'h2'},"
+    "    get wasAlternateProtocolAvailable(){return false},"
+    "    get connectionInfo(){return 'h2'}"
     "  };"
-    "};"
+    "});"
 
-    // 5. Permissions API consistency
+    // ── 6. Permissions API consistency ────────────────────────
     "(function() {"
     "  var origQuery = navigator.permissions && navigator.permissions.query;"
     "  if (origQuery) {"
-    "    navigator.permissions.query = function(desc) {"
+    "    navigator.permissions.query = __markNative(function query(desc) {"
     "      if (desc && desc.name === 'notifications') {"
     "        return Promise.resolve({state: Notification.permission, onchange: null});"
     "      }"
     "      return origQuery.apply(this, arguments);"
-    "    };"
+    "    });"
     "  }"
     "})();"
 
-    // 6. Ensure webdriver is false (CEF doesn't set it, but double-check)
+    // ── 7. navigator.webdriver = false ────────────────────────
     "Object.defineProperty(navigator, 'webdriver', {"
-    "  get: function() { return false; }"
+    "  get: __markNative(function webdriver() { return false; }),"
+    "  configurable: true"
     "});"
 
-    // 7. window.outerWidth/outerHeight for offscreen mode
+    // ── 8. navigator.connection.rtt (BotD headless check) ─────
+    // Headless Chrome reports rtt=0. Real Chrome reports non-zero.
+    "(function() {"
+    "  if (navigator.connection) {"
+    "    var orig = navigator.connection;"
+    "    if (orig.rtt === 0) {"
+    "      Object.defineProperty(orig, 'rtt', {get: function() { return 100; }, configurable: true});"
+    "    }"
+    "  }"
+    "})();"
+
+    // ── 9. Remove CEF-specific globals (BotD checks these) ───
+    "delete window.RunPerfTest;"
+    "delete window.CefSharp;"
+    "delete window.domAutomation;"
+    "delete window.domAutomationController;"
+
+    // ── 10. WebGL vendor/renderer spoofing ────────────────────
+    // SwiftShader (software renderer) is an instant headless flag.
+    // Spoof getParameter for UNMASKED_VENDOR/RENDERER constants.
+    "(function() {"
+    "  var origGetParam = WebGLRenderingContext.prototype.getParameter;"
+    "  WebGLRenderingContext.prototype.getParameter = function(param) {"
+    "    if (param === 37445) return 'Intel Inc.';"       // UNMASKED_VENDOR_WEBGL
+    "    if (param === 37446) return 'Intel Iris OpenGL Engine';"  // UNMASKED_RENDERER_WEBGL
+    "    return origGetParam.call(this, param);"
+    "  };"
+    "  __markNative(WebGLRenderingContext.prototype.getParameter);"
+    "  if (typeof WebGL2RenderingContext !== 'undefined') {"
+    "    var origGetParam2 = WebGL2RenderingContext.prototype.getParameter;"
+    "    WebGL2RenderingContext.prototype.getParameter = function(param) {"
+    "      if (param === 37445) return 'Intel Inc.';"
+    "      if (param === 37446) return 'Intel Iris OpenGL Engine';"
+    "      return origGetParam2.call(this, param);"
+    "    };"
+    "    __markNative(WebGL2RenderingContext.prototype.getParameter);"
+    "  }"
+    "})();"
+
+    // ── 11. Window/screen dimensions for offscreen mode ───────
     "if (window.outerWidth === 0) {"
-    "  Object.defineProperty(window, 'outerWidth', {get: function() { return 1920; }});"
-    "  Object.defineProperty(window, 'outerHeight', {get: function() { return 1080; }});"
+    "  Object.defineProperty(window, 'outerWidth', {get: function() { return 1920; }, configurable: true});"
+    "  Object.defineProperty(window, 'outerHeight', {get: function() { return 1080; }, configurable: true});"
     "}"
+    "if (window.innerWidth === 0) {"
+    "  Object.defineProperty(window, 'innerWidth', {get: function() { return 1920; }, configurable: true});"
+    "  Object.defineProperty(window, 'innerHeight', {get: function() { return 1080; }, configurable: true});"
+    "}"
+
+    // ── 12. navigator.languages (BotD checks empty) ──────────
+    "if (!navigator.languages || navigator.languages.length === 0) {"
+    "  Object.defineProperty(navigator, 'languages', {"
+    "    get: function() { return ['en-US', 'en']; },"
+    "    configurable: true"
+    "  });"
+    "}"
+
+    // ── 13. navigator.deviceMemory (should be > 0) ───────────
+    "if (!navigator.deviceMemory || navigator.deviceMemory === 0) {"
+    "  Object.defineProperty(navigator, 'deviceMemory', {"
+    "    get: function() { return 8; },"
+    "    configurable: true"
+    "  });"
+    "}"
+
+    // ── 14. iframe.contentWindow consistency ──────────────────
+    // Ensure srcdoc iframes have consistent chrome/self properties
+    "(function() {"
+    "  var origCreate = document.createElement;"
+    "  // No override needed if contentWindow already works correctly."
+    "  // CEF multi-process mode handles this natively."
+    "})();"
+
+    // ── Cleanup ──────────────────────────────────────────────
+    "delete window.__markNative;"
 ;
 
 // ── Render process handler ────────────────────────────────────
