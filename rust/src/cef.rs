@@ -1,29 +1,51 @@
 use anyhow::{bail, Result};
 use std::path::PathBuf;
+use std::time::Duration;
 use tokio::process::Command;
+
+const RENDER_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Render a page using the CEF renderer subprocess.
 /// Returns the fully-rendered HTML after JavaScript execution.
 pub async fn render(url: &str) -> Result<String> {
     let renderer_path = find_renderer()?;
 
-    let output = Command::new(&renderer_path)
-        .arg(url)
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .output()
-        .await
-        .map_err(|e| anyhow::anyhow!(
-            "failed to start wick-renderer at {:?}: {}. Run 'wick setup --with-js' to install CEF.",
-            renderer_path, e
-        ))?;
+    // The renderer needs the CEF framework accessible at
+    // @executable_path/../Frameworks/Chromium Embedded Framework.framework
+    let output = tokio::time::timeout(
+        RENDER_TIMEOUT,
+        Command::new(&renderer_path)
+            .arg(url)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .output(),
+    )
+    .await
+    .map_err(|_| anyhow::anyhow!("CEF rendering timed out after {}s", RENDER_TIMEOUT.as_secs()))?
+    .map_err(|e| {
+        anyhow::anyhow!(
+            "failed to start wick-renderer at {:?}: {}. \
+             Run 'wick setup --with-js' to install CEF.",
+            renderer_path,
+            e
+        )
+    })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        bail!("wick-renderer failed (exit {}): {}", output.status, stderr.trim());
+        bail!(
+            "wick-renderer failed (exit {}): {}",
+            output.status,
+            stderr.trim()
+        );
     }
 
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    let html = String::from_utf8_lossy(&output.stdout).into_owned();
+    if html.is_empty() {
+        bail!("wick-renderer returned empty output");
+    }
+
+    Ok(html)
 }
 
 /// Check if CEF renderer is available.
@@ -48,17 +70,25 @@ fn find_renderer() -> Result<PathBuf> {
     }
 
     // Try PATH
-    if let Ok(output) = std::process::Command::new("which")
-        .arg("wick-renderer")
-        .output()
-    {
-        if output.status.success() {
-            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !path.is_empty() {
-                return Ok(PathBuf::from(path));
-            }
-        }
+    if let Ok(p) = which("wick-renderer") {
+        return Ok(p);
     }
 
-    bail!("wick-renderer not found. Run 'wick setup --with-js' to install CEF for JavaScript rendering.")
+    bail!(
+        "wick-renderer not found. \
+         Run 'wick setup --with-js' to install CEF for JavaScript rendering."
+    )
+}
+
+fn which(name: &str) -> Result<PathBuf> {
+    let output = std::process::Command::new("which")
+        .arg(name)
+        .output()?;
+    if output.status.success() {
+        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !path.is_empty() {
+            return Ok(PathBuf::from(path));
+        }
+    }
+    bail!("{} not on PATH", name)
 }

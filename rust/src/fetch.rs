@@ -86,7 +86,7 @@ pub async fn fetch(
     // Check if the page needs JS rendering (SPA shell, minimal content)
     let extracted = extract::extract(&body, &parsed, format)?;
 
-    if needs_js_rendering(&extracted.content) && crate::cef::is_available() {
+    if needs_js_rendering(&extracted.content, &body) && crate::cef::is_available() {
         // Retry with CEF renderer for full JS execution
         match crate::cef::render(url).await {
             Ok(rendered_html) => {
@@ -115,15 +115,27 @@ pub async fn fetch(
 }
 
 /// Detect pages that likely need JavaScript rendering.
-fn needs_js_rendering(content: &str) -> bool {
+fn needs_js_rendering(content: &str, raw_html: &str) -> bool {
     let trimmed = content.trim();
     // Very short content after extraction suggests a JS SPA shell
-    if trimmed.len() < 100 {
+    if trimmed.len() < 200 {
         return true;
     }
     // Common SPA loading indicators
     let lower = trimmed.to_lowercase();
-    lower.contains("loading...") || lower.contains("please enable javascript")
+    if lower.contains("loading...") || lower.contains("please enable javascript") {
+        return true;
+    }
+    // Check if the raw HTML has JS framework bootstrap but little text content
+    let html_lower = raw_html.to_lowercase();
+    let has_spa_markers = html_lower.contains("__next_data__")
+        || html_lower.contains("window.__initial")
+        || html_lower.contains("react-root")
+        || html_lower.contains("ng-app")
+        || html_lower.contains("shreddit-app")
+        || html_lower.contains("<faceplate-");
+    // SPA markers + short extracted content = JS rendering needed
+    has_spa_markers && trimmed.len() < 500
 }
 
 fn is_challenge(body: &str) -> bool {
