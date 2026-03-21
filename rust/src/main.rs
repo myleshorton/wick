@@ -1,3 +1,4 @@
+mod cef;
 #[cfg(feature = "cronet")]
 mod cronet;
 mod engine;

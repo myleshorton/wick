@@ -83,7 +83,27 @@ pub async fn fetch(
             timing_ms: start.elapsed().as_millis() as u64,
         });
     }
+    // Check if the page needs JS rendering (SPA shell, minimal content)
     let extracted = extract::extract(&body, &parsed, format)?;
+
+    if needs_js_rendering(&extracted.content) && crate::cef::is_available() {
+        // Retry with CEF renderer for full JS execution
+        match crate::cef::render(url).await {
+            Ok(rendered_html) => {
+                let re_extracted = extract::extract(&rendered_html, &parsed, format)?;
+                return Ok(FetchResult {
+                    content: re_extracted.content,
+                    title: re_extracted.title.or(extracted.title),
+                    url: url.to_string(),
+                    status_code: status,
+                    timing_ms: (start.elapsed().as_millis()) as u64,
+                });
+            }
+            Err(e) => {
+                tracing::warn!("CEF rendering failed, using Cronet result: {}", e);
+            }
+        }
+    }
 
     Ok(FetchResult {
         content: extracted.content,
@@ -92,6 +112,18 @@ pub async fn fetch(
         status_code: status,
         timing_ms: start.elapsed().as_millis() as u64,
     })
+}
+
+/// Detect pages that likely need JavaScript rendering.
+fn needs_js_rendering(content: &str) -> bool {
+    let trimmed = content.trim();
+    // Very short content after extraction suggests a JS SPA shell
+    if trimmed.len() < 100 {
+        return true;
+    }
+    // Common SPA loading indicators
+    let lower = trimmed.to_lowercase();
+    lower.contains("loading...") || lower.contains("please enable javascript")
 }
 
 fn is_challenge(body: &str) -> bool {
