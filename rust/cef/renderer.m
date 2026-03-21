@@ -83,10 +83,14 @@ static void CEF_CALLBACK on_load_error(cef_load_handler_t* self,
     cef_browser_t* browser, cef_frame_t* frame,
     cef_errorcode_t errorCode, const cef_string_t* errorText,
     const cef_string_t* failedUrl) {
-    (void)self; (void)browser; (void)frame;
-    (void)errorText; (void)failedUrl;
-    fprintf(stderr, "wick-renderer: load error %d\n", errorCode);
-    cef_quit_message_loop();
+    (void)self; (void)browser; (void)errorText; (void)failedUrl;
+    // Only quit on main frame errors, not iframe/subresource failures.
+    // Sites like NYTimes have many iframes (ads, tracking pixels) that
+    // abort — these are expected and should not stop page rendering.
+    if (frame && frame->is_main(frame)) {
+        fprintf(stderr, "wick-renderer: main frame load error %d\n", errorCode);
+        cef_quit_message_loop();
+    }
 }
 
 static cef_load_handler_t g_load_handler;
