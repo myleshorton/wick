@@ -1,6 +1,4 @@
 use anyhow::Result;
-use std::collections::HashSet;
-use std::sync::Mutex;
 use std::time::Instant;
 
 use crate::engine::Client;
@@ -15,21 +13,13 @@ pub struct FetchResult {
     pub timing_ms: u64,
 }
 
-/// Domains known to require JS rendering. Once a domain is detected as
-/// an SPA, subsequent requests go directly to CEF — no double fetch.
-static JS_DOMAINS: std::sync::LazyLock<Mutex<HashSet<String>>> =
-    std::sync::LazyLock::new(|| Mutex::new(HashSet::new()));
-
-fn domain_needs_js(host: &str) -> bool {
-    JS_DOMAINS.lock().unwrap().contains(host)
-}
-
-fn mark_domain_needs_js(host: &str) {
-    JS_DOMAINS.lock().unwrap().insert(host.to_string());
-}
-
-/// Full fetch pipeline: validate → robots.txt → fetch → extract.
-/// Routes through Cronet (fast, static) or CEF (JS rendering) automatically.
+/// Full fetch pipeline: validate → robots.txt → CEF render → extract.
+///
+/// Always uses CEF (Chromium) for fetching + rendering. This means:
+/// - Single request per page (no double-fetch fingerprint signal)
+/// - JS rendering works automatically on every page
+/// - Same Chrome TLS fingerprint as Cronet (CEF IS Chromium)
+/// - Falls back to Cronet if CEF is not available
 pub async fn fetch(
     client: &Client,
     url: &str,
@@ -48,7 +38,7 @@ pub async fn fetch(
 
     let host = parsed.host_str().ok_or_else(|| anyhow::anyhow!("missing host"))?;
 
-    // robots.txt check
+    // robots.txt check (uses Cronet for the lightweight robots.txt fetch)
     if respect_robots && !robots::check(client, url).await {
         return Ok(FetchResult {
             content: format!(
@@ -63,12 +53,27 @@ pub async fn fetch(
         });
     }
 
-    // If this domain is known to need JS, go straight to CEF — no double request.
-    if domain_needs_js(host) && crate::cef::is_available() {
-        return fetch_via_cef(url, &parsed, format, start).await;
+    // Primary path: CEF (full Chromium rendering, single request).
+    // Falls back to Cronet if CEF crashes or is unavailable.
+    if crate::cef::is_available() {
+        match crate::cef::render(url).await {
+            Ok(rendered_html) => {
+                let extracted = extract::extract(&rendered_html, &parsed, format)?;
+                return Ok(FetchResult {
+                    content: extracted.content,
+                    title: extracted.title,
+                    url: url.to_string(),
+                    status_code: 200,
+                    timing_ms: start.elapsed().as_millis() as u64,
+                });
+            }
+            Err(e) => {
+                tracing::debug!("CEF render failed, falling back to Cronet: {}", e);
+            }
+        }
     }
 
-    // Fast path: Cronet
+    // Fallback: Cronet (no JS rendering, but Chrome TLS fingerprint)
     let resp = client.get(url).await?;
     let status = resp.status;
     let body = resp.body;
@@ -105,13 +110,6 @@ pub async fn fetch(
     }
 
     let extracted = extract::extract(&body, &parsed, format)?;
-
-    // Detect SPA shell → fall back to CEF and remember this domain
-    if needs_js_rendering(&extracted.content, &body) && crate::cef::is_available() {
-        mark_domain_needs_js(host);
-        return fetch_via_cef(url, &parsed, format, start).await;
-    }
-
     Ok(FetchResult {
         content: extracted.content,
         title: extracted.title,
@@ -119,47 +117,6 @@ pub async fn fetch(
         status_code: status,
         timing_ms: start.elapsed().as_millis() as u64,
     })
-}
-
-/// Fetch via CEF renderer subprocess (full JS execution).
-async fn fetch_via_cef(
-    url: &str,
-    parsed: &url::Url,
-    format: Format,
-    start: Instant,
-) -> Result<FetchResult> {
-    let rendered_html = crate::cef::render(url).await?;
-    let extracted = extract::extract(&rendered_html, parsed, format)?;
-
-    Ok(FetchResult {
-        content: extracted.content,
-        title: extracted.title,
-        url: url.to_string(),
-        status_code: 200,
-        timing_ms: start.elapsed().as_millis() as u64,
-    })
-}
-
-/// Detect pages that likely need JavaScript rendering.
-fn needs_js_rendering(content: &str, raw_html: &str) -> bool {
-    let trimmed = content.trim();
-    // Very short content after extraction suggests a JS SPA shell
-    if trimmed.len() < 200 {
-        return true;
-    }
-    let lower = trimmed.to_lowercase();
-    if lower.contains("loading...") || lower.contains("please enable javascript") {
-        return true;
-    }
-    // JS framework markers + short extracted content = SPA shell
-    let html_lower = raw_html.to_lowercase();
-    let has_spa_markers = html_lower.contains("__next_data__")
-        || html_lower.contains("window.__initial")
-        || html_lower.contains("react-root")
-        || html_lower.contains("ng-app")
-        || html_lower.contains("shreddit-app")
-        || html_lower.contains("<faceplate-");
-    has_spa_markers && trimmed.len() < 500
 }
 
 fn is_challenge(body: &str) -> bool {
