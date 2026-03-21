@@ -289,24 +289,71 @@ A critical component. Many sites work fine after the first visit sets cookies (C
 
 This means: solve a Cloudflare challenge once, and subsequent requests to that domain work without challenge for hours or days.
 
-### Headless Chrome (Cloud Tier)
+### JavaScript Rendering (Local CEF)
 
-For JavaScript-heavy sites (SPAs, Cloudflare JS challenges, dynamically loaded content), the cloud tier runs headless Chrome instances:
+For JavaScript-heavy sites (SPAs, Cloudflare JS challenges, dynamically loaded content), Wick uses the Chromium Embedded Framework (CEF) running locally on the user's machine.
 
-**Technology:** Chromium with stealth patches (similar to `puppeteer-extra-plugin-stealth`):
-- Remove `navigator.webdriver` flag
-- Spoof `navigator.plugins` and `navigator.languages`
-- Patch Chrome DevTools Protocol detection
-- Consistent `canvas` and `WebGL` fingerprints
+**Why local, not cloud:**
 
-**Pool management:**
-- Pre-warmed Chrome instances to minimize latency
-- Session isolation per user
-- Auto-scaling based on demand
-- Instance reuse with cookie/state passthrough
+| Concern | Cloud headless Chrome | Local CEF |
+|---------|----------------------|-----------|
+| **IP reputation** | Datacenter IPs are pre-flagged by Cloudflare/Akamai | User's residential IP — same as Cronet path |
+| **Automation detection** | CDP (Chrome DevTools Protocol) leaves fingerprints: `navigator.webdriver`, `__cdp_binding__`, injected execution contexts, timing anomalies | No CDP. DOM access via CEF's internal V8 + CefMessageRouter IPC — same path as Electron/Slack/Discord |
+| **Fingerprint consistency** | Stealth patches are cat-and-mouse | CEF IS Chromium — identical to any Electron app |
+| **Latency** | Network round-trip to cloud + render time | Local render only |
+| **Privacy** | Page content passes through cloud servers | Never leaves the user's machine |
 
-**Residential IP integration:**
-When residential IP is needed, the Chrome instance's traffic routes through a WireGuard tunnel back to the user's Wick daemon, then exits from their IP. From the target site's perspective, it looks like a normal Chrome user on a residential connection — because that's what it is.
+**Why not Playwright/Puppeteer?** Both use the Chrome DevTools Protocol (CDP) to control Chrome over a WebSocket connection. Modern anti-bot systems (Cloudflare, DataDome, Akamai) detect CDP through multiple vectors:
+- `navigator.webdriver` flag (set automatically when CDP is connected)
+- `__cdp_binding__` and other injected globals
+- Modified prototype chains and execution contexts
+- Timing anomalies from the WebSocket message round-trip
+- `Runtime.evaluate` side effects visible to page JS
+
+Even with stealth patches (`puppeteer-extra-plugin-stealth`), this is an arms race. CEF avoids it entirely by accessing the DOM through Chromium's internal APIs, not an external debugging protocol.
+
+**Architecture:**
+
+```
+wick binary (29MB)                     wick-renderer (CEF, ~120MB optional download)
+┌─────────────────────┐               ┌──────────────────────────────────────┐
+│ MCP Server          │               │ Offscreen CefBrowser                 │
+│ Cronet Engine       │  stdio IPC    │ Chromium rendering engine            │
+│ Content Extraction  │◄─────────────►│ V8 JavaScript execution              │
+│ CLI                 │               │ CefMessageRouter (DOM extraction)    │
+└─────────────────────┘               └──────────────────────────────────────┘
+```
+
+The CEF renderer is a separate binary, spawned on demand only when a page requires JavaScript. The main `wick` binary handles 90%+ of requests via Cronet alone.
+
+**DOM extraction flow (no CDP):**
+1. `wick` detects page needs JS (empty content, SPA bootstrap, explicit `wait_for_js`)
+2. Spawns `wick-renderer` (or reuses running instance)
+3. CEF loads URL in offscreen browser (no visible window)
+4. Chromium renders normally — full JS, DOM, CSS, network requests
+5. `CefMessageRouter` extracts `document.documentElement.outerHTML` via internal V8 IPC
+6. HTML returned to `wick` via stdio, piped through readability → markdown
+7. Result returned to agent
+
+**Distribution:** CEF is an optional ~120MB download, not bundled:
+```bash
+wick setup --with-js    # one-time CEF download
+```
+Stored in `~/.wick/cef/`. Users who only need static content never download it.
+
+**Language considerations:**
+
+CEF's native API is C/C++. The current Go implementation uses Cronet (also C) via cgo, but no mature Go CEF bindings exist for headless use. Options under evaluation:
+
+1. **Go + C shim** — Thin C wrapper (~1000 LOC) around CEF's C API, called from Go via cgo. Keeps the existing Go codebase. Risk: complex multi-process management from Go.
+
+2. **Hybrid: Go + C++ renderer** — Keep Go for MCP server/CLI/Cronet (the 29MB binary), write `wick-renderer` in C++ where CEF is native. Clean separation, each language used where it's strongest. Communicate via stdio.
+
+3. **Rewrite in Rust** — Native CEF C API access, good MCP SDK (rmcp), single binary possible. Risk: rewrite cost, smaller ecosystem.
+
+4. **Electron/TypeScript** — Electron IS Chromium. Network stack identical to Chrome. MCP SDK most mature in TypeScript. An Electron-based Wick has a perfect fingerprint because it is literally a Chromium application. Risk: ~150MB binary for all requests (not just JS), "just another Electron app" perception.
+
+The hybrid approach (option 2) is currently favored: lean Go binary for fast Cronet-only requests, C++ CEF renderer spawned only when needed.
 
 ---
 
@@ -520,9 +567,9 @@ For unattended operation (CI/CD, batch jobs), offer optional third-party CAPTCHA
 
 This is a pass-through cost with markup. Opt-in only.
 
-### Layer 4: Cloud JS challenge solving (paid tier)
+### Layer 4: Local JS challenge solving (CEF, paid tier)
 
-Cloudflare's "managed challenge" (the "Checking your browser..." interstitial) is a JavaScript challenge, not a visual CAPTCHA. Headless Chrome in the cloud tier solves these automatically by executing the JS. Most paid-tier requests that would trigger a managed challenge are resolved without user interaction.
+Cloudflare's "managed challenge" (the "Checking your browser..." interstitial) is a JavaScript challenge, not a visual CAPTCHA. The local CEF renderer executes the JS challenge natively — from the user's residential IP, with no CDP fingerprints — and extracts the clearance cookie. Most managed challenges are resolved automatically without user interaction.
 
 ---
 
@@ -531,9 +578,8 @@ Cloudflare's "managed challenge" (the "Checking your browser..." interstitial) i
 ### Primary: MCP tool directories + package managers
 
 ```
-brew install getlantern/tap/wick    # macOS
-npm install -g @wick/cli            # cross-platform (wraps Go binary)
-go install github.com/myleshorton/wick@latest  # Go developers
+brew tap myleshorton/wick && brew install wick    # macOS
+npm install -g wick-mcp                            # cross-platform (wraps Go binary)
 ```
 
 The `wick setup` command auto-configures all detected MCP clients.
@@ -565,18 +611,20 @@ Developer installs Wick (free) for their AI agent
 
 | Tier | Price | What you get | Our cost |
 |------|-------|--------------|----------|
-| **Free** | $0 | Local Cronet daemon, browser-grade fetch, cookie persistence, CAPTCHA user-in-the-loop, markdown extraction | ~$0 (runs on user's device) |
-| **Pro** | $29/mo | Everything Free + cloud JS rendering (1,000 pages/mo), structured extraction, screenshot, auto CAPTCHA solving, residential IP routing | ~$3-5/user (Chrome instances) |
-| **Team** | $79/mo (5 seats) | Everything Pro + shared sessions, team cookie store, HTTP MCP transport, priority rendering | ~$15-20/team |
-| **Enterprise** | Custom | Everything Team + SLA, SSO, audit logs, on-prem deployment, custom extraction models, dedicated Chrome pool | Variable |
+| **Free** | $0 | Local Cronet fetch, browser-grade TLS, cookie persistence, CAPTCHA user-in-the-loop, markdown extraction | ~$0 (runs on user's device) |
+| **Pro** | $29/mo | Everything Free + local CEF JS rendering (auto-configured), structured extraction, auto CAPTCHA solving, priority support | ~$0 marginal (runs on user's device) |
+| **Team** | $79/mo (5 seats) | Everything Pro + shared sessions, team cookie store, HTTP MCP transport | ~$2-5/team (API/auth infrastructure) |
+| **Enterprise** | Custom | Everything Team + SLA, SSO, audit logs, on-prem deployment, custom extraction models | Variable |
 
 ### Unit economics (Pro tier)
 
 - Revenue: $29/mo
-- Cloud Chrome cost: ~$0.003/page render × 1,000 pages = $3
+- Infrastructure cost: ~$0 (everything runs locally on user's device)
 - CAPTCHA solving (if automated): ~$0.002/solve × estimated 50/mo = $0.10
-- Infrastructure overhead (API, auth, logging): ~$2/user amortized
-- **Gross margin: ~82%**
+- Auth/billing/support overhead: ~$2/user amortized
+- **Gross margin: ~93%**
+
+The local-first architecture means the Pro tier is almost pure margin — we're selling software, not cloud compute. The user's machine does all the work.
 
 ### Revenue projections (conservative)
 
@@ -719,21 +767,30 @@ The free tier costs us nothing — it runs entirely on the user's hardware. Free
 
 **Deliverable:** Wick handles Cloudflare-protected sites gracefully across macOS, Linux, Windows.
 
-### Phase 3: Cloud Tier (Weeks 9-14)
+### Phase 3: Local JS Rendering via CEF (Weeks 9-14)
 
-**Goal:** JavaScript rendering and paid tier infrastructure.
+**Goal:** Full JavaScript rendering for SPAs and JS challenges, running locally.
 
-- [ ] Cloud API service (Go, deployed on Fly.io or similar)
-- [ ] Headless Chrome pool with stealth patches
-- [ ] WireGuard tunnel for residential IP routing (leverage `getlantern/wireguard-go`)
-- [ ] Auto-detection: local fetch first, cloud fallback for JS-required pages
+- [ ] C++ `wick-renderer` binary with CEF offscreen rendering
+- [ ] CefMessageRouter-based DOM extraction (no CDP)
+- [ ] stdio IPC between `wick` (Go) and `wick-renderer` (C++)
+- [ ] Auto-detection of JS-required pages (empty content, SPA bootstrap, `<noscript>`)
+- [ ] `wick setup --with-js` downloads platform-specific CEF distribution (~120MB)
 - [ ] Structured extraction (CSS selectors + LLM-assisted)
-- [ ] Screenshot capture
-- [ ] User accounts + API keys (Stripe billing)
-- [ ] Usage metering and quota enforcement
-- [ ] HTTP + SSE MCP transport for team/remote use
+- [ ] Evaluate full rewrite in Rust or C++ if Go+CEF integration proves too complex
 
-**Deliverable:** `wick_fetch(url, wait_for_js=true)` renders JavaScript-heavy pages in the cloud.
+**Deliverable:** `wick_fetch(url, wait_for_js=true)` renders JavaScript-heavy pages locally via CEF.
+
+### Phase 3b: Paid Tier (Weeks 12-16)
+
+**Goal:** Revenue from Pro features.
+
+- [ ] Stripe billing + API key management
+- [ ] Auto-CAPTCHA solving (webview + CapSolver/2Captcha fallback)
+- [ ] Auto-configured CEF (no manual `--with-js` setup)
+- [ ] Structured data extraction
+- [ ] Priority support
+- [ ] HTTP + SSE MCP transport for team/remote use
 
 ### Phase 4: Scale + Ecosystem (Weeks 15-20)
 
@@ -861,4 +918,4 @@ Agent: Here's the pricing information:
 
 ---
 
-*This document is a living design. Last updated: 2026-03-19.*
+*This document is a living design. Last updated: 2026-03-20.*
