@@ -76,7 +76,6 @@ impl Engine {
             error: Mutex::new(None),
             request: Mutex::new(std::ptr::null_mut()),
             callback: Mutex::new(std::ptr::null_mut()),
-            buffer: Mutex::new(std::ptr::null_mut()),
         });
         let state_ptr = Box::into_raw(state) as *mut c_void;
 
@@ -168,7 +167,6 @@ struct RequestState {
     error: Mutex<Option<String>>,
     request: Mutex<ffi::Cronet_UrlRequestPtr>,
     callback: Mutex<ffi::Cronet_UrlRequestCallbackPtr>,
-    buffer: Mutex<ffi::Cronet_BufferPtr>,
 }
 
 fn get_state(callback: ffi::Cronet_UrlRequestCallbackPtr) -> &'static RequestState {
@@ -219,7 +217,6 @@ unsafe extern "C" fn on_response_started(
     // Start reading the response body
     let buffer = ffi::Cronet_Buffer_Create();
     ffi::Cronet_Buffer_InitWithAlloc(buffer, READ_BUFFER_SIZE);
-    *state.buffer.lock().unwrap() = buffer;
     ffi::Cronet_UrlRequest_Read(request, buffer);
 }
 
@@ -248,10 +245,8 @@ unsafe fn finish_request(callback: ffi::Cronet_UrlRequestCallbackPtr) -> Box<Req
     let boxed = Box::from_raw(ctx as *mut RequestState);
     let req = *boxed.request.lock().unwrap();
     let cb = *boxed.callback.lock().unwrap();
-    let buf = *boxed.buffer.lock().unwrap();
-    if !buf.is_null() {
-        ffi::Cronet_Buffer_Destroy(buf);
-    }
+    // Note: Cronet buffers are reused across on_read_completed callbacks
+    // and destroyed internally by Cronet when the request completes.
     if !req.is_null() {
         ffi::Cronet_UrlRequest_Destroy(req);
     }
