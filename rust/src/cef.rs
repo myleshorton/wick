@@ -1,60 +1,90 @@
 use anyhow::{bail, Result};
 use std::path::PathBuf;
 use std::time::Duration;
-use tokio::process::Command;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::process::{Child, Command};
+use tokio::sync::Mutex;
 
 const RENDER_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// Render a page using the CEF renderer subprocess.
-/// Returns the fully-rendered HTML after JavaScript execution.
-pub async fn render(url: &str) -> Result<String> {
-    // Clean up stale CEF cache directories from previous runs.
-    // CEF single-process mode uses singleton locks that prevent reuse.
-    // Brief delay lets the OS fully release resources from a prior renderer.
+/// Persistent CEF renderer process. Spawned once, reused for all requests.
+struct RendererProcess {
+    child: Child,
+    stdin: tokio::process::ChildStdin,
+    reader: BufReader<tokio::process::ChildStdout>,
+}
+
+static RENDERER: tokio::sync::OnceCell<Mutex<RendererProcess>> =
+    tokio::sync::OnceCell::const_new();
+
+async fn get_renderer() -> Result<&'static Mutex<RendererProcess>> {
+    RENDERER
+        .get_or_try_init(|| async { spawn_renderer().await.map(Mutex::new) })
+        .await
+}
+
+async fn spawn_renderer() -> Result<RendererProcess> {
     cleanup_cef_caches();
-    tokio::time::sleep(Duration::from_millis(500)).await;
 
     let renderer_path = find_renderer()?;
 
-    // The renderer needs the CEF framework accessible at
-    // @executable_path/../Frameworks/Chromium Embedded Framework.framework
-    let output = tokio::time::timeout(
-        RENDER_TIMEOUT,
-        Command::new(&renderer_path)
-            .arg(url)
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .output(),
-    )
+    let mut child = Command::new(&renderer_path)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| {
+            anyhow::anyhow!(
+                "failed to start wick-renderer at {:?}: {}. \
+                 Run 'wick setup --with-js' to install CEF.",
+                renderer_path,
+                e
+            )
+        })?;
+
+    let stdin = child.stdin.take().unwrap();
+    let stdout = child.stdout.take().unwrap();
+
+    Ok(RendererProcess {
+        child,
+        stdin,
+        reader: BufReader::new(stdout),
+    })
+}
+
+/// Render a page using the persistent CEF renderer.
+/// First call spawns the process; subsequent calls reuse it.
+pub async fn render(url: &str) -> Result<String> {
+    let renderer_mutex = get_renderer().await?;
+    let mut renderer = renderer_mutex.lock().await;
+
+    tokio::time::timeout(RENDER_TIMEOUT, async {
+        // Send URL
+        renderer
+            .stdin
+            .write_all(format!("{}\n", url).as_bytes())
+            .await?;
+        renderer.stdin.flush().await?;
+
+        // Read length line
+        let mut len_line = String::new();
+        renderer.reader.read_line(&mut len_line).await?;
+        let len: usize = len_line.trim().parse().map_err(|e| {
+            anyhow::anyhow!("invalid length from renderer: {:?} ({})", len_line.trim(), e)
+        })?;
+
+        if len == 0 {
+            bail!("renderer returned empty page");
+        }
+
+        // Read exactly `len` bytes of HTML
+        let mut html_bytes = vec![0u8; len];
+        tokio::io::AsyncReadExt::read_exact(&mut renderer.reader, &mut html_bytes).await?;
+
+        Ok(String::from_utf8_lossy(&html_bytes).into_owned())
+    })
     .await
     .map_err(|_| anyhow::anyhow!("CEF rendering timed out after {}s", RENDER_TIMEOUT.as_secs()))?
-    .map_err(|e| {
-        anyhow::anyhow!(
-            "failed to start wick-renderer at {:?}: {}. \
-             Run 'wick setup --with-js' to install CEF.",
-            renderer_path,
-            e
-        )
-    })?;
-
-    let html = String::from_utf8_lossy(&output.stdout).into_owned();
-
-    // CEF sometimes crashes during shutdown (cef_shutdown SIGTRAP) even though
-    // rendering succeeded. Accept the output if we got HTML regardless of exit code.
-    if !html.is_empty() {
-        return Ok(html);
-    }
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        bail!(
-            "wick-renderer failed (exit {}): {}",
-            output.status,
-            stderr.trim()
-        );
-    }
-
-    bail!("wick-renderer returned empty output")
 }
 
 /// Check if CEF renderer is available.
@@ -63,24 +93,23 @@ pub fn is_available() -> bool {
 }
 
 fn find_renderer() -> Result<PathBuf> {
-    // Search for wick-renderer.app bundle (multi-process mode) or bare binary.
-    // The .app bundle is required for macOS multi-process CEF.
     let locations = [
-        // .app bundle next to wick binary
+        // .app bundle next to wick binary (multi-process mode)
         std::env::current_exe().ok().and_then(|p| {
-            p.parent().map(|d| {
-                d.join("wick-renderer.app/Contents/MacOS/wick-renderer")
-            })
+            p.parent()
+                .map(|d| d.join("wick-renderer.app/Contents/MacOS/wick-renderer"))
         }),
         // Bare binary next to wick (single-process fallback)
         std::env::current_exe()
             .ok()
             .and_then(|p| p.parent().map(|d| d.join("wick-renderer"))),
         // User install location
-        std::env::var_os("HOME")
-            .map(|h| PathBuf::from(h).join(".wick").join("cef").join(
-                "wick-renderer.app/Contents/MacOS/wick-renderer"
-            )),
+        std::env::var_os("HOME").map(|h| {
+            PathBuf::from(h)
+                .join(".wick")
+                .join("cef")
+                .join("wick-renderer.app/Contents/MacOS/wick-renderer")
+        }),
     ];
 
     for loc in locations.iter().flatten() {
@@ -89,7 +118,6 @@ fn find_renderer() -> Result<PathBuf> {
         }
     }
 
-    // Try PATH
     if let Ok(p) = which("wick-renderer") {
         return Ok(p);
     }
@@ -116,9 +144,7 @@ fn cleanup_cef_caches() {
 }
 
 fn which(name: &str) -> Result<PathBuf> {
-    let output = std::process::Command::new("which")
-        .arg(name)
-        .output()?;
+    let output = std::process::Command::new("which").arg(name).output()?;
     if output.status.success() {
         let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
         if !path.is_empty() {
