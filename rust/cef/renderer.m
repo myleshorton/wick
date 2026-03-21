@@ -159,13 +159,12 @@ int main(int argc, char* argv[]) {
     uint32_t exe_buf_size = sizeof(exe_buf);
     _NSGetExecutablePath(exe_buf, &exe_buf_size);
 
-    // Inject CEF flags
-    int new_argc = argc + 3;
+    // Inject CEF flags (multi-process mode, GPU disabled for headless)
+    int new_argc = argc + 2;
     char** new_argv = malloc(sizeof(char*) * (new_argc + 1));
     for (int i = 0; i < argc; i++) new_argv[i] = argv[i];
-    new_argv[argc] = "--single-process";
-    new_argv[argc + 1] = "--disable-gpu";
-    new_argv[argc + 2] = "--disable-gpu-compositing";
+    new_argv[argc] = "--disable-gpu";
+    new_argv[argc + 1] = "--disable-gpu-compositing";
     new_argv[new_argc] = NULL;
 
     // Must call cef_api_hash first to configure the API version tables.
@@ -218,14 +217,37 @@ int main(int argc, char* argv[]) {
     settings.no_sandbox = 1;
     settings.log_severity = LOGSEVERITY_ERROR;
 
+    // Standard macOS .app bundle layout: Frameworks/ is at Contents/Frameworks/
+    // which is @executable_path/../Frameworks/ (exe is in Contents/MacOS/)
+    char* exe_dir = dirname(exe_buf);
     char fw_dir[4096];
     snprintf(fw_dir, sizeof(fw_dir), "%s/../Frameworks/Chromium Embedded Framework.framework",
-             dirname(exe_buf));
+             exe_dir);
     cef_string_utf8_to_utf16(fw_dir, strlen(fw_dir), &settings.framework_dir_path);
 
-    char exe_real[4096];
-    realpath(exe_buf, exe_real);
-    cef_string_utf8_to_utf16(exe_real, strlen(exe_real), &settings.browser_subprocess_path);
+    // Helper binary in standard bundle location
+    char helper_path[4096];
+    snprintf(helper_path, sizeof(helper_path),
+             "%s/../Frameworks/wick Helper.app/Contents/MacOS/wick Helper",
+             exe_dir);
+    char helper_real[4096];
+    if (realpath(helper_path, helper_real)) {
+        cef_string_utf8_to_utf16(helper_real, strlen(helper_real),
+                                  &settings.browser_subprocess_path);
+    } else {
+        fprintf(stderr, "wick-renderer: helper not found at %s\n", helper_path);
+        return 1;
+    }
+
+    // Set main_bundle_path to the .app bundle containing this binary.
+    // CEF uses this for Mach port rendezvous registration on macOS.
+    char bundle_path[4096];
+    snprintf(bundle_path, sizeof(bundle_path), "%s/../..", exe_dir);
+    char bundle_real[4096];
+    if (realpath(bundle_path, bundle_real)) {
+        cef_string_utf8_to_utf16(bundle_real, strlen(bundle_real),
+                                  &settings.main_bundle_path);
+    }
 
     char cache_path[4096];
     snprintf(cache_path, sizeof(cache_path), "%s/.wick/cef-cache-%d",

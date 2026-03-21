@@ -63,13 +63,24 @@ pub fn is_available() -> bool {
 }
 
 fn find_renderer() -> Result<PathBuf> {
-    // Search order: next to wick binary, ~/.wick/cef/, PATH
+    // Search for wick-renderer.app bundle (multi-process mode) or bare binary.
+    // The .app bundle is required for macOS multi-process CEF.
     let locations = [
+        // .app bundle next to wick binary
+        std::env::current_exe().ok().and_then(|p| {
+            p.parent().map(|d| {
+                d.join("wick-renderer.app/Contents/MacOS/wick-renderer")
+            })
+        }),
+        // Bare binary next to wick (single-process fallback)
         std::env::current_exe()
             .ok()
             .and_then(|p| p.parent().map(|d| d.join("wick-renderer"))),
+        // User install location
         std::env::var_os("HOME")
-            .map(|h| PathBuf::from(h).join(".wick").join("cef").join("wick-renderer")),
+            .map(|h| PathBuf::from(h).join(".wick").join("cef").join(
+                "wick-renderer.app/Contents/MacOS/wick-renderer"
+            )),
     ];
 
     for loc in locations.iter().flatten() {
