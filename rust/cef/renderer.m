@@ -11,6 +11,8 @@
 #include <libgen.h>
 #include <mach-o/dyld.h>
 
+#import <Cocoa/Cocoa.h>
+
 #include "include/capi/cef_app_capi.h"
 #include "include/capi/cef_browser_capi.h"
 #include "include/capi/cef_client_capi.h"
@@ -30,12 +32,14 @@ static int g_done = 0;
 static void CEF_CALLBACK add_ref(cef_base_ref_counted_t* self) { (void)self; }
 static int CEF_CALLBACK release(cef_base_ref_counted_t* self) { (void)self; return 1; }
 static int CEF_CALLBACK has_one_ref(cef_base_ref_counted_t* self) { (void)self; return 1; }
+static int CEF_CALLBACK has_at_least_one_ref(cef_base_ref_counted_t* self) { (void)self; return 1; }
 
 static void init_base(cef_base_ref_counted_t* base, size_t size) {
     base->size = size;
     base->add_ref = add_ref;
     base->release = release;
     base->has_one_ref = has_one_ref;
+    base->has_at_least_one_ref = has_at_least_one_ref;
 }
 
 // ── String visitor — receives the rendered HTML ───────────────
@@ -57,6 +61,8 @@ static void CEF_CALLBACK visitor_visit(cef_string_visitor_t* self,
     }
     fflush(stdout);
     g_done = 1;
+    // Quit the message loop and NSApplication
+    cef_quit_message_loop();
 }
 
 static html_visitor_t g_html_visitor;
@@ -221,6 +227,12 @@ int main(int argc, char* argv[]) {
     }
     const char* url = argv[1];
 
+    // macOS requires NSApplication before CEF can create browsers
+    @autoreleasepool {
+    [NSApplication sharedApplication];
+    [NSApp setActivationPolicy:NSApplicationActivationPolicyAccessory];
+    }
+
     // Initialize handlers
     init_base(&g_html_visitor.visitor.base, sizeof(cef_string_visitor_t));
     g_html_visitor.visitor.visit = visitor_visit;
@@ -245,6 +257,9 @@ int main(int argc, char* argv[]) {
     g_client.client.get_life_span_handler = get_life_span_handler;
     g_client.client.get_load_handler = get_load_handler;
     g_client.client.get_render_handler = get_render_handler;
+    // All other get_*_handler pointers stay NULL (CEF checks before calling).
+    // on_process_message_received must be set for single-process mode:
+    g_client.client.on_process_message_received = NULL;
 
     // CEF settings
     cef_settings_t settings = {};
@@ -279,14 +294,19 @@ int main(int argc, char* argv[]) {
                               &settings.root_cache_path);
 
     // Initialize CEF
-    if (!cef_initialize(&main_args, &settings, NULL, NULL)) {
+    fprintf(stderr, "DEBUG: calling cef_initialize...\n");
+    int init_result = cef_initialize(&main_args, &settings, NULL, NULL);
+    fprintf(stderr, "DEBUG: cef_initialize returned %d\n", init_result);
+    if (!init_result) {
         fprintf(stderr, "wick-renderer: cef_initialize failed\n");
         return 1;
     }
 
     // Create browser
     cef_window_info_t window_info = {};
+    window_info.size = sizeof(cef_window_info_t);
     window_info.windowless_rendering_enabled = 1;
+    window_info.hidden = 1;
 
     cef_browser_settings_t browser_settings = {};
     browser_settings.size = sizeof(cef_browser_settings_t);
@@ -295,14 +315,24 @@ int main(int argc, char* argv[]) {
     cef_string_t cef_url = {};
     cef_string_utf8_to_utf16(url, strlen(url), &cef_url);
 
-    cef_browser_host_create_browser(&window_info, &g_client.client,
-                                     &cef_url, &browser_settings,
-                                     NULL, NULL);
+    fprintf(stderr, "DEBUG: struct sizes: client=%zu, window_info=%zu, browser_settings=%zu\n",
+            sizeof(cef_client_t), sizeof(cef_window_info_t), sizeof(cef_browser_settings_t));
+    fprintf(stderr, "DEBUG: calling cef_browser_host_create_browser_sync...\n");
+    cef_browser_t* browser = cef_browser_host_create_browser_sync(
+        &window_info, &g_client.client, &cef_url, &browser_settings, NULL, NULL);
+    fprintf(stderr, "DEBUG: cef_browser_host_create_browser_sync returned %p\n", (void*)browser);
+    if (browser) {
+        g_browser = browser;
+    }
     cef_string_clear(&cef_url);
 
-    // Run message loop until done
+    fprintf(stderr, "DEBUG: entering message loop...\n");
+
+    // CEF's message loop integrates with macOS's Cocoa run loop
+    // (NSApplication was created above before cef_initialize)
     cef_run_message_loop();
 
     cef_shutdown();
+    free(new_argv);
     return 0;
 }
