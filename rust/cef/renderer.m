@@ -214,6 +214,11 @@ int main(int argc, char* argv[]) {
     new_argv[argc + 2] = "--disable-gpu-compositing";
     new_argv[new_argc] = NULL;
 
+    // Configure the CEF API version — must be called before any other CEF function.
+    // cef_api_hash() sets the internal API version on first call.
+    cef_api_hash(CEF_API_VERSION, 0);
+    fprintf(stderr, "DEBUG: CEF API version configured: %d\n", cef_api_version());
+
     // CEF subprocess check — must be first
     cef_main_args_t main_args = { .argc = new_argc, .argv = new_argv };
     int exit_code = cef_execute_process(&main_args, NULL, NULL);
