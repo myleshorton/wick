@@ -1,3 +1,5 @@
+#[cfg(feature = "cronet")]
+mod cronet;
 mod engine;
 mod extract;
 mod fetch;

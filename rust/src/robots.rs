@@ -52,8 +52,8 @@ async fn get_robots(client: &crate::engine::Client, host: &str) -> Option<String
 
     let url = format!("{}/robots.txt", host);
     let resp = client.get(&url).await.ok()?;
-    let status = resp.status().as_u16();
-    let body = resp.text().await.ok()?;
+    let status = resp.status;
+    let body = resp.body;
 
     let robots_body = match status {
         200 => body,

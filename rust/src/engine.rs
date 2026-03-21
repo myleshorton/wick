@@ -1,36 +1,73 @@
 use anyhow::Result;
-use reqwest::header::{HeaderMap, HeaderValue};
+use std::path::PathBuf;
 
-/// Chrome version must match the Cronet/Chromium version (143).
+#[cfg(feature = "cronet")]
+use crate::cronet;
+
 const CHROME_MAJOR: &str = "143";
 const CHROME_FULL: &str = "143.0.7499.109";
 
 /// HTTP client with Chrome-equivalent headers.
-/// Currently uses reqwest; will be replaced with Cronet FFI.
+/// With the `cronet` feature, uses Chromium's actual network stack.
+/// Without it, uses reqwest with Chrome-like headers (weaker fingerprint).
 pub struct Client {
+    #[cfg(feature = "cronet")]
+    engine: cronet::Engine,
+    #[cfg(not(feature = "cronet"))]
     inner: reqwest::Client,
 }
 
 impl Client {
     pub fn new() -> Result<Self> {
-        let client = reqwest::Client::builder()
-            .user_agent(chrome_user_agent())
-            .default_headers(chrome_headers())
-            .gzip(true)
-            .brotli(true)
-            .deflate(true)
-            .timeout(std::time::Duration::from_secs(30))
-            .build()?;
-        Ok(Self { inner: client })
+        #[cfg(feature = "cronet")]
+        {
+            let storage = storage_path()?;
+            let engine = cronet::Engine::new(&storage, &chrome_user_agent())?;
+            Ok(Self { engine })
+        }
+        #[cfg(not(feature = "cronet"))]
+        {
+            let client = reqwest::Client::builder()
+                .user_agent(chrome_user_agent())
+                .default_headers(chrome_headers_reqwest())
+                .gzip(true)
+                .brotli(true)
+                .deflate(true)
+                .timeout(std::time::Duration::from_secs(30))
+                .build()?;
+            Ok(Self { inner: client })
+        }
     }
 
-    pub async fn get(&self, url: &str) -> Result<reqwest::Response> {
-        Ok(self.inner.get(url).send().await?)
+    pub async fn get(&self, url: &str) -> Result<HttpResponse> {
+        #[cfg(feature = "cronet")]
+        {
+            let headers = chrome_header_pairs();
+            let resp = self.engine.get(url, &headers).await?;
+            Ok(HttpResponse {
+                status: resp.status_code,
+                body: resp.text(),
+            })
+        }
+        #[cfg(not(feature = "cronet"))]
+        {
+            let resp = self.inner.get(url).send().await?;
+            let status = resp.status().as_u16();
+            let body = resp.text().await?;
+            Ok(HttpResponse { status, body })
+        }
     }
+}
 
-    pub fn inner(&self) -> &reqwest::Client {
-        &self.inner
-    }
+pub struct HttpResponse {
+    pub status: u16,
+    pub body: String,
+}
+
+fn storage_path() -> Result<PathBuf> {
+    let home = std::env::var_os("HOME")
+        .ok_or_else(|| anyhow::anyhow!("cannot determine home directory"))?;
+    Ok(PathBuf::from(home).join(".wick").join("data"))
 }
 
 pub fn chrome_user_agent() -> String {
@@ -41,7 +78,26 @@ pub fn chrome_user_agent() -> String {
     )
 }
 
-pub fn chrome_headers() -> HeaderMap {
+/// Header pairs for Cronet (name, value).
+#[cfg(feature = "cronet")]
+fn chrome_header_pairs() -> Vec<(&'static str, &'static str)> {
+    vec![
+        ("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"),
+        ("Accept-Language", "en-US,en;q=0.9"),
+        ("Accept-Encoding", "gzip, deflate, br, zstd"),
+        ("Cache-Control", "max-age=0"),
+        ("Sec-Fetch-Dest", "document"),
+        ("Sec-Fetch-Mode", "navigate"),
+        ("Sec-Fetch-Site", "none"),
+        ("Sec-Fetch-User", "?1"),
+        ("Upgrade-Insecure-Requests", "1"),
+    ]
+}
+
+/// Headers for reqwest fallback.
+#[cfg(not(feature = "cronet"))]
+fn chrome_headers_reqwest() -> reqwest::header::HeaderMap {
+    use reqwest::header::{HeaderMap, HeaderValue};
     let mut h = HeaderMap::new();
     h.insert("Accept", HeaderValue::from_static(
         "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
@@ -53,8 +109,7 @@ pub fn chrome_headers() -> HeaderMap {
         "Sec-Ch-Ua",
         HeaderValue::from_str(&format!(
             r#""Chromium";v="{CHROME_MAJOR}", "Google Chrome";v="{CHROME_MAJOR}", "Not:A-Brand";v="24""#
-        ))
-        .unwrap(),
+        )).unwrap(),
     );
     h.insert("Sec-Ch-Ua-Mobile", HeaderValue::from_static("?0"));
     h.insert("Sec-Ch-Ua-Platform", HeaderValue::from_static("\"macOS\""));

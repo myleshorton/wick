@@ -6,6 +6,11 @@ description = "Browser-grade web access for AI agents"
 license = "MIT"
 repository = "https://github.com/myleshorton/wick"
 
+[features]
+# Enable Cronet for Chrome-identical TLS/HTTP2/QUIC fingerprinting.
+# Without this, falls back to reqwest (rustls TLS — detectable).
+cronet = []
+
 [dependencies]
 rmcp = { version = "1.2", features = ["server", "macros", "transport-io"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "signal", "sync", "time"] }

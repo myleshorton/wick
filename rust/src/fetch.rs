@@ -50,10 +50,10 @@ pub async fn fetch(
     }
 
     let resp = client.get(url).await?;
-    let status = resp.status().as_u16();
+    let status = resp.status;
+    let body = resp.body;
 
     if status == 403 || status == 503 {
-        let body = resp.text().await.unwrap_or_default();
         if is_challenge(&body) {
             return Ok(FetchResult {
                 content: "This page returned a CAPTCHA or browser challenge. \
@@ -75,7 +75,6 @@ pub async fn fetch(
     }
 
     if status >= 400 {
-        let body = resp.text().await.unwrap_or_default();
         return Ok(FetchResult {
             content: format!("HTTP {}: {}", status, body),
             title: None,
@@ -84,8 +83,6 @@ pub async fn fetch(
             timing_ms: start.elapsed().as_millis() as u64,
         });
     }
-
-    let body = resp.text().await?;
     let extracted = extract::extract(&body, &parsed, format)?;
 
     Ok(FetchResult {
