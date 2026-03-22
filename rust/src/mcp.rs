@@ -52,8 +52,8 @@ impl std::fmt::Debug for WickServer {
 
 #[tool_router]
 impl WickServer {
-    pub fn new() -> Result<Self, anyhow::Error> {
-        let client = Client::new()?;
+    pub fn new(proxy: Option<&str>) -> Result<Self, anyhow::Error> {
+        let client = Client::new(proxy)?;
         Ok(Self {
             tool_router: Self::tool_router(),
             client: std::sync::Arc::new(client),

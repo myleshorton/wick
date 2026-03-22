@@ -53,6 +53,7 @@ extern "C" {
     pub fn Cronet_EngineParams_http_cache_mode_set(params: Cronet_EngineParamsPtr, mode: c_int);
     pub fn Cronet_EngineParams_http_cache_max_size_set(params: Cronet_EngineParamsPtr, size: i64);
     pub fn Cronet_EngineParams_enable_check_result_set(params: Cronet_EngineParamsPtr, v: bool);
+    pub fn Cronet_EngineParams_experimental_options_set(params: Cronet_EngineParamsPtr, opts: Cronet_String);
 
     // Engine
     pub fn Cronet_Engine_Create() -> Cronet_EnginePtr;

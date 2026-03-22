@@ -19,7 +19,7 @@ unsafe impl Send for Engine {}
 unsafe impl Sync for Engine {}
 
 impl Engine {
-    pub fn new(storage_path: &Path, user_agent: &str) -> Result<Self> {
+    pub fn new(storage_path: &Path, user_agent: &str, proxy: Option<&str>) -> Result<Self> {
         std::fs::create_dir_all(storage_path)?;
 
         let ua = CString::new(user_agent)?;
@@ -35,6 +35,13 @@ impl Engine {
             ffi::Cronet_EngineParams_http_cache_mode_set(params, ffi::HTTP_CACHE_MODE_DISK);
             ffi::Cronet_EngineParams_http_cache_max_size_set(params, 50 * 1024 * 1024);
             ffi::Cronet_EngineParams_enable_check_result_set(params, false);
+
+            // Configure SOCKS proxy if specified
+            if let Some(proxy_url) = proxy {
+                let opts = format!(r#"{{"proxy_rules":"{}"}}"#, proxy_url);
+                let c_opts = CString::new(opts)?;
+                ffi::Cronet_EngineParams_experimental_options_set(params, c_opts.as_ptr());
+            }
 
             let engine = ffi::Cronet_Engine_Create();
             let result = ffi::Cronet_Engine_StartWithParams(engine, params);

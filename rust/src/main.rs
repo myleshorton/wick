@@ -17,6 +17,11 @@ use rmcp::{ServiceExt, transport::stdio};
 #[derive(Parser)]
 #[command(name = "wick", about = "Browser-grade web access for AI agents")]
 struct Cli {
+    /// SOCKS5 proxy for residential IP tunneling (e.g., socks5://localhost:1080)
+    /// Also reads from WICK_PROXY environment variable.
+    #[arg(long, global = true, env = "WICK_PROXY")]
+    proxy: Option<String>,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -58,6 +63,8 @@ enum Command {
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
+    let proxy = cli.proxy.as_deref();
+
     match cli.command {
         Command::Serve { mcp: true } => {
             tracing_subscriber::fmt()
@@ -69,7 +76,7 @@ async fn main() -> Result<()> {
                 .with_ansi(false)
                 .init();
 
-            let server = mcp::WickServer::new()?;
+            let server = mcp::WickServer::new(proxy)?;
             let service = server
                 .serve(stdio())
                 .await
@@ -86,7 +93,7 @@ async fn main() -> Result<()> {
             format,
             no_robots,
         } => {
-            let client = engine::Client::new()?;
+            let client = engine::Client::new(proxy)?;
             let result = fetch::fetch(
                 &client,
                 &url,
@@ -103,7 +110,7 @@ async fn main() -> Result<()> {
             Ok(())
         }
         Command::Search { query, num } => {
-            let client = engine::Client::new()?;
+            let client = engine::Client::new(proxy)?;
             let results = search::search(&client, &query, num).await?;
             println!("{}", search::format_results(&results));
             Ok(())

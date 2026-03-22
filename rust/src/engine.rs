@@ -18,24 +18,30 @@ pub struct Client { // Debug not derived: inner types don't support it
 }
 
 impl Client {
-    pub fn new() -> Result<Self> {
+    /// Create a new client. If `proxy` is Some, route through a SOCKS5 proxy
+    /// (e.g., "socks5://localhost:1080" for SSH reverse tunnel).
+    pub fn new(proxy: Option<&str>) -> Result<Self> {
         #[cfg(feature = "cronet")]
         {
             let storage = storage_path()?;
-            let engine = cronet::Engine::new(&storage, &chrome_user_agent())?;
+            let engine = cronet::Engine::new(&storage, &chrome_user_agent(), proxy)?;
             Ok(Self { engine })
         }
         #[cfg(not(feature = "cronet"))]
         {
-            let client = reqwest::Client::builder()
+            let mut builder = reqwest::Client::builder()
                 .user_agent(chrome_user_agent())
                 .default_headers(chrome_headers_reqwest())
                 .gzip(true)
                 .brotli(true)
                 .deflate(true)
-                .timeout(std::time::Duration::from_secs(30))
-                .build()?;
-            Ok(Self { inner: client })
+                .timeout(std::time::Duration::from_secs(30));
+
+            if let Some(proxy_url) = proxy {
+                builder = builder.proxy(reqwest::Proxy::all(proxy_url)?);
+            }
+
+            Ok(Self { inner: builder.build()? })
         }
     }
 
