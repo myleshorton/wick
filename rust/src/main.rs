@@ -1,5 +1,4 @@
 mod captcha;
-mod captcha_auto;
 #[cfg(feature = "cronet")]
 mod cronet;
 mod engine;
