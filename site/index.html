@@ -1057,12 +1057,12 @@ footer {
       <p style="color: var(--warm-gray); font-size: 0.9rem; margin-bottom: 1.5rem;">For companies accessing high-value data</p>
       <ul style="list-style: none; font-size: 0.9rem; line-height: 2.2; color: var(--warm-gray);">
         <li style="color: var(--warm-white);">&#x2713; Everything in Free</li>
-        <li style="color: var(--flame);">&#x2713; Full JavaScript rendering</li>
-        <li style="color: var(--flame);">&#x2713; Advanced anti-detection</li>
-        <li style="color: var(--flame);">&#x2713; Continuously updated evasions</li>
-        <li style="color: var(--flame);">&#x2713; Custom browser fingerprint</li>
+        <li style="color: var(--flame);">&#x2713; Full JavaScript rendering (CEF)</li>
+        <li style="color: var(--flame);">&#x2713; 20 anti-detection stealth patches</li>
+        <li style="color: var(--flame);">&#x2713; Adaptive per-site strategy learning</li>
+        <li style="color: var(--flame);">&#x2713; Smart residential IP routing</li>
         <li style="color: var(--flame);">&#x2713; CAPTCHA handling</li>
-        <li style="color: var(--flame);">&#x2713; Residential IP tunneling</li>
+        <li style="color: var(--flame);">&#x2713; One-command server install</li>
         <li style="color: var(--flame);">&#x2713; Dedicated support + SLA</li>
       </ul>
       <div style="margin-top: 1.5rem;">
@@ -1080,27 +1080,30 @@ footer {
   </div>
   <div style="max-width: 700px; margin: 0 auto;">
     <p class="reveal" style="color: var(--warm-gray); text-align: center; margin-bottom: 2.5rem; font-size: 1.05rem; line-height: 1.7;">
-      Run Wick on a cloud server but exit from your residential IP. Two commands, zero configuration files.
+      Run Wick on a cloud server but exit from your residential IP. Three commands, zero configuration files.
     </p>
     <div class="step reveal" style="display: grid; grid-template-columns: 48px 1fr; gap: 1.5rem; padding: 1.5rem 0; border-bottom: 1px solid var(--smoke-light);">
       <div style="width:48px;height:48px;border-radius:50%;border:1px solid var(--flame);display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:0.9rem;color:var(--flame);">01</div>
-      <div><h3 style="font-weight:600;font-size:1.15rem;margin-bottom:0.5rem;">Initialize on your server</h3>
-        <code style="display:inline-block;background:var(--smoke);border:1px solid var(--smoke-light);border-radius:6px;padding:0.3rem 0.6rem;font-family:var(--font-mono);font-size:0.85rem;color:var(--flame);">sudo wick-tunnel init</code>
-        <p style="color:var(--cool-gray);font-size:0.85rem;margin-top:0.5rem;">Generates a join token. One line, installs WireGuard if needed.</p>
+      <div><h3 style="font-weight:600;font-size:1.15rem;margin-bottom:0.5rem;">Install on your server</h3>
+        <code style="display:block;background:var(--smoke);border:1px solid var(--smoke-light);border-radius:6px;padding:0.5rem 0.6rem;font-family:var(--font-mono);font-size:0.8rem;color:var(--flame);line-height:1.6;white-space:pre-wrap;">WICK_KEY=your_key curl -fsSL https://releases.getwick.dev/install-pro.sh | sudo -E bash</code>
+        <p style="color:var(--cool-gray);font-size:0.85rem;margin-top:0.5rem;">We'll give you an API key when you sign up. One command installs everything.</p>
       </div>
     </div>
     <div class="step reveal reveal-delay-1" style="display: grid; grid-template-columns: 48px 1fr; gap: 1.5rem; padding: 1.5rem 0; border-bottom: 1px solid var(--smoke-light);">
       <div style="width:48px;height:48px;border-radius:50%;border:1px solid var(--flame);display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:0.9rem;color:var(--flame);">02</div>
-      <div><h3 style="font-weight:600;font-size:1.15rem;margin-bottom:0.5rem;">Connect from your laptop</h3>
-        <code style="display:inline-block;background:var(--smoke);border:1px solid var(--smoke-light);border-radius:6px;padding:0.3rem 0.6rem;font-family:var(--font-mono);font-size:0.85rem;color:var(--flame);">sudo wick-tunnel join &lt;token&gt;</code>
-        <p style="color:var(--cool-gray);font-size:0.85rem;margin-top:0.5rem;">Your laptop's residential IP is now available to the server. Survives wifi changes.</p>
+      <div><h3 style="font-weight:600;font-size:1.15rem;margin-bottom:0.5rem;">Connect your residential IP</h3>
+        <code style="display:block;background:var(--smoke);border:1px solid var(--smoke-light);border-radius:6px;padding:0.5rem 0.6rem;font-family:var(--font-mono);font-size:0.8rem;color:var(--flame);line-height:1.6;white-space:pre-wrap;"># On your server:
+sudo wick-tunnel init          # prints a token
+# On your laptop:
+sudo wick-tunnel join &lt;token&gt;  # connects your IP</code>
+        <p style="color:var(--cool-gray);font-size:0.85rem;margin-top:0.5rem;">WireGuard tunnel routes server traffic through your residential IP. Survives wifi changes.</p>
       </div>
     </div>
     <div class="step reveal reveal-delay-2" style="display: grid; grid-template-columns: 48px 1fr; gap: 1.5rem; padding: 1.5rem 0;">
       <div style="width:48px;height:48px;border-radius:50%;border:1px solid var(--flame);display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:0.9rem;color:var(--flame);">03</div>
-      <div><h3 style="font-weight:600;font-size:1.15rem;margin-bottom:0.5rem;">Fetch from the server</h3>
+      <div><h3 style="font-weight:600;font-size:1.15rem;margin-bottom:0.5rem;">Fetch anything</h3>
         <code style="display:inline-block;background:var(--smoke);border:1px solid var(--smoke-light);border-radius:6px;padding:0.3rem 0.6rem;font-family:var(--font-mono);font-size:0.85rem;color:var(--flame);">wick fetch https://any-site.com</code>
-        <p style="color:var(--cool-gray);font-size:0.85rem;margin-top:0.5rem;">Chrome fingerprint + your residential IP. Sites can't tell it's not your browser.</p>
+        <p style="color:var(--cool-gray);font-size:0.85rem;margin-top:0.5rem;">Chrome fingerprint + JS rendering + stealth patches + adaptive IP routing. Learns per site, gets faster over time.</p>
       </div>
     </div>
   </div>
