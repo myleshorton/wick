@@ -439,7 +439,7 @@ Claude Code `settings.json`:
 
 Or via Homebrew one-liner:
 ```bash
-brew install getlantern/tap/wick && wick setup
+brew tap wickproject/wick && brew install wick && wick setup
 ```
 
 `wick setup` auto-detects installed MCP clients (Claude Code, Cursor, etc.) and configures them.
