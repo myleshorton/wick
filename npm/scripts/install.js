@@ -3,13 +3,13 @@ const fs = require("fs");
 const path = require("path");
 const { execFileSync } = require("child_process");
 
-const VERSION = "0.1.0";
+const VERSION = "0.2.0";
 const PLATFORM = `${process.platform}-${process.arch}`;
 
 const ASSETS = {
   "darwin-arm64": {
-    url: `https://github.com/myleshorton/wick/releases/download/v${VERSION}/wick-${VERSION}-darwin-arm64.tar.gz`,
-    sha256: "353f2262314fe2cad5760a9c72161c61b3d4da56e1c6749fa16112599f317570",
+    url: `https://github.com/wickproject/wick/releases/download/v${VERSION}/wick-${VERSION}-darwin-arm64.tar.gz`,
+    sha256: "9d38cdcd01ab6a662989d87c14709bd998a5be62aacd40599104f745e630683a",
   },
 };
 
@@ -18,7 +18,7 @@ if (!asset) {
   console.error(
     `Wick does not yet have a prebuilt binary for ${PLATFORM}.\n` +
       `Supported: ${Object.keys(ASSETS).join(", ")}\n` +
-      `See https://github.com/myleshorton/wick for build-from-source instructions.`
+      `See https://github.com/wickproject/wick for build-from-source instructions.`
   );
   process.exit(1);
 }

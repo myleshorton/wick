@@ -516,7 +516,7 @@ Cloudflare's "managed challenge" (the "Checking your browser..." interstitial) i
 ### Primary: MCP tool directories + package managers
 
 ```
-brew tap myleshorton/wick && brew install wick    # macOS
+brew tap wickproject/wick && brew install wick    # macOS
 npm install -g wick-mcp                            # cross-platform (wraps Go binary)
 ```
 
